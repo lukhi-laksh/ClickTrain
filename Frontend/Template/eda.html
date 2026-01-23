@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Exploratory Data Analysis - ClickTrain</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .hover-lift:hover { transform: translateY(-2px); }
+    .animate-fade-in { animation: fadeIn 0.6s ease-in-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body class="bg-white text-gray-900">
+  <div id="ml-header"></div>
+
+  <!-- Main Content -->
+  <main class="min-h-screen py-16">
+    <div class="max-w-6xl mx-auto px-8">
+      <div class="text-center mb-12">
+        <h1 class="text-4xl font-bold mb-4">Exploratory Data Analysis</h1>
+        <p class="text-xl text-gray-600">Understand your data through comprehensive analysis</p>
+      </div>
+
+      <!-- Data Summary Cards -->
+      <div class="grid md:grid-cols-4 gap-6 mb-12">
+        <div class="bg-white rounded-xl p-6 border border-gray-200 hover-lift transition-all duration-300 shadow-sm">
+          <div class="text-3xl mb-4">📊</div>
+          <h3 class="text-lg font-semibold mb-2">Dataset Shape</h3>
+          <p class="text-2xl font-bold text-indigo-600" id="shape">1,000 × 5</p>
+          <p class="text-sm text-gray-500">rows × columns</p>
+        </div>
+        <div class="bg-white rounded-xl p-6 border border-gray-200 hover-lift transition-all duration-300 shadow-sm">
+          <div class="text-3xl mb-4">🔢</div>
+          <h3 class="text-lg font-semibold mb-2">Numeric Columns</h3>
+          <p class="text-2xl font-bold text-green-600" id="numericCols">3</p>
+          <p class="text-sm text-gray-500">continuous features</p>
+        </div>
+        <div class="bg-white rounded-xl p-6 border border-gray-200 hover-lift transition-all duration-300 shadow-sm">
+          <div class="text-3xl mb-4">📝</div>
+          <h3 class="text-lg font-semibold mb-2">Categorical Columns</h3>
+          <p class="text-2xl font-bold text-yellow-600" id="catCols">2</p>
+          <p class="text-sm text-gray-500">discrete features</p>
+        </div>
+        <div class="bg-white rounded-xl p-6 border border-gray-200 hover-lift transition-all duration-300 shadow-sm">
+          <div class="text-3xl mb-4">❓</div>
+          <h3 class="text-lg font-semibold mb-2">Missing Values</h3>
+          <p class="text-2xl font-bold text-red-600" id="missingVals">0</p>
+          <p class="text-sm text-gray-500">total missing</p>
+        </div>
+      </div>
+
+      <!-- Statistical Summary -->
+      <div class="bg-white rounded-xl p-6 border border-gray-200 mb-12 shadow-sm">
+        <h3 class="text-2xl font-semibold mb-6">Statistical Summary</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm border-collapse border border-gray-200">
+            <thead>
+              <tr class="bg-gray-50">
+                <th class="border border-gray-300 px-4 py-2 text-left">Column</th>
+                <th class="border border-gray-300 px-4 py-2 text-left">Count</th>
+                <th class="border border-gray-300 px-4 py-2 text-left">Mean</th>
+                <th class="border border-gray-300 px-4 py-2 text-left">Std</th>
+                <th class="border border-gray-300 px-4 py-2 text-left">Min</th>
+                <th class="border border-gray-300 px-4 py-2 text-left">25%</th>
+                <th class="border border-gray-300 px-4 py-2 text-left">50%</th>
+                <th class="border border-gray-300 px-4 py-2 text-left">75%</th>
+                <th class="border border-gray-300 px-4 py-2 text-left">Max</th>
+              </tr>
+            </thead>
+            <tbody id="statsTable" class="bg-white">
+              <!-- Statistical data will be populated by JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Charts Placeholder -->
+      <div class="grid md:grid-cols-2 gap-8 mb-12">
+        <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+          <h3 class="text-xl font-semibold mb-4">Distribution Plot</h3>
+          <div class="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
+            <p class="text-gray-500">Chart visualization would appear here</p>
+          </div>
+        </div>
+        <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+          <h3 class="text-xl font-semibold mb-4">Correlation Matrix</h3>
+          <div class="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
+            <p class="text-gray-500">Heatmap visualization would appear here</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation -->
+      <div class="flex justify-between">
+        <a href="upload.html" class="px-6 py-3 bg-gray-700 text-white rounded-xl hover:bg-gray-600 transition-colors duration-300">
+          ← Back to Upload
+        </a>
+        <a href="preprocessing.html" class="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors duration-300">
+          Proceed to Preprocessing →
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <!-- Scripts -->
+  <script>
+    const mobileToggle = document.getElementById('mobileMenuToggle');
+    const mobileMenu = document.getElementById('mobileMenu');
+    mobileToggle.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+    });
+
+    // Get session ID from URL or localStorage
+    const urlParams = new URLSearchParams(window.location.search);
+    let sessionId = urlParams.get('session_id') || localStorage.getItem('session_id');
+
+    if (!sessionId) {
+      alert('No session ID found. Please upload a dataset first.');
+      window.location.href = 'upload.html';
+      return;
+    }
+
+    // Load EDA data
+    loadEDAData(sessionId);
+
+    function loadEDAData(sessionId) {
+      fetch(`http://127.0.0.1:8001/api/eda/${sessionId}`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.statistics) {
+            // Update summary cards
+            const stats = data.statistics;
+            document.getElementById('shape').textContent = `${stats.shape[0]} × ${stats.shape[1]}`;
+            document.getElementById('numericCols').textContent = Object.values(stats.dtypes).filter(type => type.includes('int') || type.includes('float')).length;
+            document.getElementById('catCols').textContent = Object.values(stats.dtypes).filter(type => type.includes('object')).length;
+            document.getElementById('missingVals').textContent = Object.values(stats.missing_values).reduce((a, b) => a + b, 0);
+
+            // Populate statistical summary table
+            const statsTable = document.getElementById('statsTable');
+            statsTable.innerHTML = '';
+
+            if (stats.basic_stats) {
+              Object.keys(stats.basic_stats).forEach(column => {
+                const colStats = stats.basic_stats[column];
+                const tr = document.createElement('tr');
+                tr.className = 'border-b border-gray-700';
+                tr.innerHTML = `
+                  <td class="border border-gray-600 px-4 py-2 font-medium">${column}</td>
+                  <td class="border border-gray-600 px-4 py-2">${colStats.count || 'N/A'}</td>
+                  <td class="border border-gray-600 px-4 py-2">${colStats.mean ? colStats.mean.toFixed(2) : 'N/A'}</td>
+                  <td class="border border-gray-600 px-4 py-2">${colStats.std ? colStats.std.toFixed(2) : 'N/A'}</td>
+                  <td class="border border-gray-600 px-4 py-2">${colStats.min || 'N/A'}</td>
+                  <td class="border border-gray-600 px-4 py-2">${colStats['25%'] ? colStats['25%'].toFixed(2) : 'N/A'}</td>
+                  <td class="border border-gray-600 px-4 py-2">${colStats['50%'] ? colStats['50%'].toFixed(2) : 'N/A'}</td>
+                  <td class="border border-gray-600 px-4 py-2">${colStats['75%'] ? colStats['75%'].toFixed(2) : 'N/A'}</td>
+                  <td class="border border-gray-600 px-4 py-2">${colStats.max || 'N/A'}</td>
+                `;
+                statsTable.appendChild(tr);
+              });
+            }
+
+            // Update navigation links with session_id
+            const backLink = document.querySelector('a[href="upload.html"]');
+            const nextLink = document.querySelector('a[href="preprocessing.html"]');
+            if (backLink) backLink.href = 'upload.html';
+            if (nextLink) nextLink.href = `preprocessing.html?session_id=${sessionId}`;
+
+          } else {
+            alert('Failed to load EDA data: ' + (data.detail || 'Unknown error'));
+          }
+        })
+        .catch(error => {
+          console.error('EDA error:', error);
+          alert('Failed to load EDA data. Please check if the backend server is running.');
+        });
+    }
+  </script>
+  <script src="header.js"></script>
+</body>
+</html>

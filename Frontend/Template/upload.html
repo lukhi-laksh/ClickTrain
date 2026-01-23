@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Upload Dataset - ClickTrain</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .hover-lift:hover { transform: translateY(-2px); }
+    .animate-fade-in { animation: fadeIn 0.6s ease-in-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body class="bg-white text-gray-900">
+  <div id="ml-header"></div>
+
+  <!-- Main Content -->
+  <main class="min-h-screen py-16">
+    <div class="max-w-4xl mx-auto px-8">
+      <div class="text-center mb-12">
+        <h1 class="text-4xl font-bold mb-4">Upload Your Dataset</h1>
+        <p class="text-xl text-gray-600">Start your ML journey by uploading a CSV file</p>
+      </div>
+
+      <!-- Upload Area -->
+      <div id="dropZone" class="bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl p-12 text-center hover-lift transition-all duration-300 hover:border-indigo-400">
+        <div class="text-6xl mb-6">📁</div>
+        <h3 class="text-2xl font-semibold mb-4">Drag & Drop Your CSV File</h3>
+        <p class="text-gray-500 mb-8">Or click to browse files (max 50MB)</p>
+        <input type="file" id="fileInput" accept=".csv" class="hidden">
+        <button onclick="document.getElementById('fileInput').click()" class="px-8 py-4 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl">
+          Choose File
+        </button>
+      </div>
+
+      <!-- File Info -->
+      <div id="fileInfo" class="mt-8 hidden">
+        <div class="mb-4 text-center">
+          <h4 id="fileInfoTitle" class="text-xl font-semibold text-gray-900">
+            Information about <span class="font-bold">selected file</span>
+          </h4>
+        </div>
+        <div class="grid gap-4 md:grid-cols-3">
+          <!-- Card 1: Rows -->
+          <div class="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm flex flex-col justify-center items-center text-center">
+            <p class="text-xs uppercase tracking-wide text-gray-500 mb-1">Rows</p>
+            <p id="rowCount" class="text-3xl font-bold text-indigo-600"></p>
+            <p class="text-xs text-gray-500 mt-1">number of rows</p>
+          </div>
+          <!-- Card 2: Columns -->
+          <div class="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm flex flex-col justify-center items-center text-center">
+            <p class="text-xs uppercase tracking-wide text-gray-500 mb-1">Columns</p>
+            <p id="colCount" class="text-3xl font-bold text-indigo-600"></p>
+            <p class="text-xs text-gray-500 mt-1">total features</p>
+          </div>
+          <!-- Card 3: File Size -->
+          <div class="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm flex flex-col justify-center items-center text-center">
+            <p class="text-xs uppercase tracking-wide text-gray-500 mb-1">File Size</p>
+            <p id="fileSize" class="text-xl font-semibold text-gray-900"></p>
+            <p class="text-xs text-gray-500 mt-1">file size (MB)</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Data Preview -->
+      <div id="dataPreview" class="mt-8 hidden">
+        <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+          <div class="flex flex-col items-center mb-4">
+            <h4 class="text-lg font-semibold text-center">Data Preview</h4>
+            <p class="text-xs text-gray-500 mt-1 text-center">Showing first 5 rows (df.head())</p>
+          </div>
+          <div class="overflow-x-auto rounded-xl border border-gray-200 bg-gray-50">
+            <table id="previewTable" class="min-w-max text-xs border-collapse">
+              <thead>
+                <tr id="previewHeaderRow" class="bg-gray-100">
+                  <!-- Header cells will be populated dynamically -->
+                </tr>
+              </thead>
+              <tbody id="tableBody" class="bg-white">
+                <!-- Table rows will be populated by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Next Step -->
+      <div id="nextStep" class="mt-12 text-center hidden">
+        <a href="Analysis.html" class="inline-block px-8 py-4 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl">
+          Proceed to Analysis →
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <!-- Scripts -->
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const dropZone = document.getElementById('dropZone');
+    const fileInfo = document.getElementById('fileInfo');
+    const dataPreview = document.getElementById('dataPreview');
+    const nextStep = document.getElementById('nextStep');
+
+    fileInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        processFile(file);
+      }
+    });
+
+    // Drag & drop support
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.add('border-indigo-500', 'bg-indigo-50');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (eventName === 'drop') {
+          const file = e.dataTransfer.files[0];
+          if (file) {
+            processFile(file);
+          }
+        }
+        dropZone.classList.remove('border-indigo-500', 'bg-indigo-50');
+      });
+    });
+
+    function renderUploadState(state, sessionId) {
+      const fileInfoTitleEl = document.getElementById('fileInfoTitle');
+      const fileSizeEl = document.getElementById('fileSize');
+      const rowCountEl = document.getElementById('rowCount');
+      const colCountEl = document.getElementById('colCount');
+      const headerRow = document.getElementById('previewHeaderRow');
+      const tableBody = document.getElementById('tableBody');
+
+      fileInfoTitleEl.innerHTML = 'Information about <span class="font-bold">' + state.fileName + '</span>';
+      fileSizeEl.textContent = state.fileSizeMB + ' MB';
+      rowCountEl.textContent = state.rowCount;
+      colCountEl.textContent = state.colCount;
+
+      headerRow.innerHTML = '';
+      tableBody.innerHTML = '';
+
+      const columns = state.columns || [];
+      const preview = Array.isArray(state.preview) ? state.preview : [];
+
+      if (columns.length === 0) {
+        // No structural information at all, show generic message
+        const emptyCell = document.createElement('td');
+        emptyCell.colSpan = 1;
+        emptyCell.className = 'px-4 py-4 text-center text-gray-500';
+        emptyCell.textContent = 'Dataset loaded, but no preview is available.';
+        const row = document.createElement('tr');
+        row.appendChild(emptyCell);
+        tableBody.appendChild(row);
+      } else {
+        // Header cells
+        columns.forEach(col => {
+          const th = document.createElement('th');
+          th.className = 'border border-gray-200 px-3 py-2 text-center text-[11px] font-semibold text-gray-700 bg-gray-100 whitespace-normal break-words max-w-[160px]';
+          th.textContent = col;
+          th.title = col;
+          headerRow.appendChild(th);
+        });
+
+        // Data rows (df.head()) from backend
+        if (preview.length === 0) {
+          // Fallback row if somehow preview is empty
+          const row = document.createElement('tr');
+          row.className = 'even:bg-gray-50';
+          columns.forEach(() => {
+            const td = document.createElement('td');
+            td.className = 'border border-gray-200 px-3 py-2 text-center text-[11px] text-gray-500';
+            td.textContent = '—';
+            row.appendChild(td);
+          });
+          tableBody.appendChild(row);
+        } else {
+          console.log('Rendering preview. Columns:', columns);
+          console.log('First preview row from backend:', preview[0]);
+
+          preview.forEach((rowObj, rowIndex) => {
+            const row = document.createElement('tr');
+            row.className = 'even:bg-gray-50 hover:bg-indigo-50 transition-colors';
+
+            columns.forEach((col, colIndex) => {
+              const td = document.createElement('td');
+              td.className = 'border border-gray-200 px-3 py-2 text-center text-[11px] text-gray-800 align-middle whitespace-normal break-words max-w-[180px]';
+
+              let value;
+              // Most common case: preview is array of objects keyed by column name (from pandas to_dict)
+              if (rowObj && typeof rowObj === 'object' && !Array.isArray(rowObj)) {
+                value = rowObj[col];
+              } else if (Array.isArray(rowObj)) {
+                // Fallback: preview is array of arrays, use column index
+                value = rowObj[colIndex];
+              } else {
+                // Very defensive: row is a primitive, just show it
+                value = rowObj;
+              }
+
+              const displayValue = value === null || value === undefined ? '' : String(value);
+              td.textContent = displayValue;
+              td.title = displayValue;
+              row.appendChild(td);
+            });
+
+            tableBody.appendChild(row);
+          });
+        }
+      }
+
+      fileInfo.classList.remove('hidden');
+      dataPreview.classList.remove('hidden');
+      nextStep.classList.remove('hidden');
+
+      // Ensure Analysis link has current session id
+      const nextLink = document.querySelector('#nextStep a');
+      nextLink.href = `Analysis.html?session_id=${sessionId}`;
+    }
+
+    function processFile(file) {
+      console.log('File selected:', file.name, file.size);
+
+      // Show loading state
+      const fileInfoTitleEl = document.getElementById('fileInfoTitle');
+      const fileSizeEl = document.getElementById('fileSize');
+      const rowCountEl = document.getElementById('rowCount');
+      const colCountEl = document.getElementById('colCount');
+
+      fileInfoTitleEl.innerHTML = 'Information about <span class="font-bold">uploading file...</span>';
+      fileSizeEl.textContent = '';
+      rowCountEl.textContent = '';
+      colCountEl.textContent = '';
+      fileInfo.classList.remove('hidden');
+
+      // Create FormData
+      const formData = new FormData();
+      formData.append('file', file);
+
+      console.log('Sending request to backend...');
+
+      // Upload to backend
+      fetch('http://127.0.0.1:8001/api/upload', {
+        method: 'POST',
+        body: formData
+      })
+      .then(response => {
+        console.log('Response received:', response.status);
+        return response.json();
+      })
+      .then(data => {
+        console.log('Data received:', data);
+        if (data.session_id) {
+          // Store session ID
+          localStorage.setItem('session_id', data.session_id);
+          console.log('Session ID stored:', data.session_id);
+
+          // Build state from backend (pandas) response
+          const state = {
+            fileName: file.name,
+            fileSizeMB: (file.size / 1024 / 1024).toFixed(2),
+            rowCount: Array.isArray(data.shape) ? data.shape[0] : data.shape?.[0],
+            colCount: Array.isArray(data.shape) ? data.shape[1] : data.shape?.[1],
+            columns: data.columns || [],
+            preview: Array.isArray(data.preview) ? data.preview : []
+          };
+
+          // Persist full upload state so it survives navigation
+          localStorage.setItem('upload_state', JSON.stringify(state));
+
+          // Render UI from state
+          renderUploadState(state, data.session_id);
+
+          console.log('Upload successful, UI updated');
+
+        } else {
+          console.error('Upload failed:', data);
+          alert('Upload failed: ' + (data.detail || 'Unknown error'));
+        }
+      })
+      .catch(error => {
+        console.error('Upload error:', error);
+        alert('Upload failed. Please check if the backend server is running.');
+      });
+    }
+
+    // Restore previous upload state (from backend data) if available
+    (function restorePreviousUpload() {
+      const storedState = localStorage.getItem('upload_state');
+      const sessionId = localStorage.getItem('session_id');
+      if (!storedState || !sessionId) return;
+      try {
+        const state = JSON.parse(storedState);
+        if (!state || !state.fileName) return;
+        renderUploadState(state, sessionId);
+        console.log('Restored upload state from previous session');
+      } catch (e) {
+        console.error('Failed to restore upload state:', e);
+      }
+    })();
+  </script>
+  <script src="header.js"></script>
+</body>
+</html>

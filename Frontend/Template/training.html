@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Model Training - ClickTrain</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .hover-lift:hover { transform: translateY(-2px); }
+    .animate-fade-in { animation: fadeIn 0.6s ease-in-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    .progress-bar { transition: width 0.3s ease; }
+  </style>
+</head>
+<body class="bg-white text-gray-900">
+  <div id="ml-header"></div>
+
+  <!-- Main Content -->
+  <main class="min-h-screen py-16">
+    <div class="max-w-6xl mx-auto px-8">
+      <div class="text-center mb-12">
+        <h1 class="text-4xl font-bold mb-4">Model Training</h1>
+        <p class="text-xl text-gray-600">Select and train your machine learning model</p>
+      </div>
+
+      <!-- Model Selection -->
+      <div class="bg-white rounded-xl p-6 border border-gray-200 mb-8 shadow-sm">
+        <h3 class="text-2xl font-semibold mb-6">Choose Your Algorithm</h3>
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <label class="relative">
+            <input type="radio" name="model" value="linear" class="sr-only peer">
+            <div class="p-4 border-2 border-gray-200 rounded-lg cursor-pointer peer-checked:border-indigo-500 peer-checked:bg-indigo-50 hover:border-gray-300 transition-all">
+              <div class="text-2xl mb-2">📈</div>
+              <h4 class="font-semibold">Linear Regression</h4>
+              <p class="text-sm text-gray-600">For continuous predictions</p>
+            </div>
+          </label>
+          <label class="relative">
+            <input type="radio" name="model" value="logistic" class="sr-only peer">
+            <div class="p-4 border-2 border-gray-200 rounded-lg cursor-pointer peer-checked:border-indigo-500 peer-checked:bg-indigo-50 hover:border-gray-300 transition-all">
+              <div class="text-2xl mb-2">🎯</div>
+              <h4 class="font-semibold">Logistic Regression</h4>
+              <p class="text-sm text-gray-600">For binary classification</p>
+            </div>
+          </label>
+          <label class="relative">
+            <input type="radio" name="model" value="rf" class="sr-only peer" checked>
+            <div class="p-4 border-2 border-indigo-500 bg-indigo-50 rounded-lg cursor-pointer peer-checked:border-indigo-500 peer-checked:bg-indigo-50 hover:border-gray-300 transition-all">
+              <div class="text-2xl mb-2">🌳</div>
+              <h4 class="font-semibold">Random Forest</h4>
+              <p class="text-sm text-gray-600">Ensemble method</p>
+            </div>
+          </label>
+          <label class="relative">
+            <input type="radio" name="model" value="svm" class="sr-only peer">
+            <div class="p-4 border-2 border-gray-200 rounded-lg cursor-pointer peer-checked:border-indigo-500 peer-checked:bg-indigo-50 hover:border-gray-300 transition-all">
+              <div class="text-2xl mb-2">⚙️</div>
+              <h4 class="font-semibold">SVM</h4>
+              <p class="text-sm text-gray-600">Support Vector Machine</p>
+            </div>
+          </label>
+          <label class="relative">
+            <input type="radio" name="model" value="knn" class="sr-only peer">
+            <div class="p-4 border-2 border-gray-200 rounded-lg cursor-pointer peer-checked:border-indigo-500 peer-checked:bg-indigo-50 hover:border-gray-300 transition-all">
+              <div class="text-2xl mb-2">👥</div>
+              <h4 class="font-semibold">K-Nearest Neighbors</h4>
+              <p class="text-sm text-gray-600">Distance-based method</p>
+            </div>
+          </label>
+          <label class="relative">
+            <input type="radio" name="model" value="nn" class="sr-only peer">
+            <div class="p-4 border-2 border-gray-200 rounded-lg cursor-pointer peer-checked:border-indigo-500 peer-checked:bg-indigo-50 hover:border-gray-300 transition-all">
+              <div class="text-2xl mb-2">🧠</div>
+              <h4 class="font-semibold">Neural Network</h4>
+              <p class="text-sm text-gray-600">Deep learning model</p>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Hyperparameters -->
+      <div class="bg-white rounded-xl p-6 border border-gray-200 mb-8 shadow-sm">
+        <h3 class="text-2xl font-semibold mb-6">Hyperparameter Tuning</h3>
+        <div class="grid md:grid-cols-2 gap-6">
+          <div>
+            <label class="block text-sm font-medium mb-2">Learning Rate</label>
+            <input type="range" min="0.001" max="1" step="0.001" value="0.1" class="w-full" id="learningRate">
+            <div class="flex justify-between text-xs text-gray-500">
+              <span>0.001</span>
+              <span id="lrValue" class="font-medium">0.1</span>
+              <span>1.0</span>
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-2">Max Iterations</label>
+            <input type="range" min="100" max="10000" step="100" value="1000" class="w-full" id="maxIter">
+            <div class="flex justify-between text-xs text-gray-500">
+              <span>100</span>
+              <span id="iterValue" class="font-medium">1000</span>
+              <span>10000</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Training Progress -->
+      <div class="bg-white rounded-xl p-6 border border-gray-200 mb-8 shadow-sm">
+        <h3 class="text-2xl font-semibold mb-6">Training Progress</h3>
+        <div class="space-y-4">
+          <div>
+            <div class="flex justify-between text-sm mb-2">
+              <span>Training Progress</span>
+              <span id="progressPercent">0%</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-3">
+              <div id="progressBar" class="bg-indigo-600 h-3 rounded-full progress-bar" style="width: 0%"></div>
+            </div>
+          </div>
+          <div class="grid md:grid-cols-3 gap-4 text-center">
+            <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <div class="text-2xl font-bold text-green-600" id="accuracy">0.00</div>
+              <div class="text-sm text-gray-600">Accuracy</div>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <div class="text-2xl font-bold text-blue-600" id="precision">0.00</div>
+              <div class="text-sm text-gray-600">Precision</div>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <div class="text-2xl font-bold text-yellow-600" id="recall">0.00</div>
+              <div class="text-sm text-gray-600">Recall</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Start Training Button -->
+      <div class="text-center mb-12">
+        <button id="startTraining" class="px-8 py-4 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl">
+          Start Training
+        </button>
+      </div>
+
+      <!-- Navigation -->
+      <div class="flex justify-between">
+        <a href="preprocessing.html" class="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors duration-300 border border-gray-200">
+          ← Back to Preprocessing
+        </a>
+        <a href="export.html" id="proceedBtn" class="px-6 py-3 bg-gray-200 text-gray-500 rounded-xl cursor-not-allowed border border-gray-200" disabled>
+          Proceed to Export →
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <!-- Scripts -->
+  <script>
+    const mobileToggle = document.getElementById('mobileMenuToggle');
+    const mobileMenu = document.getElementById('mobileMenu');
+    mobileToggle.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+    });
+
+    // Hyperparameter sliders
+    const lrSlider = document.getElementById('learningRate');
+    const lrValue = document.getElementById('lrValue');
+    const iterSlider = document.getElementById('maxIter');
+    const iterValue = document.getElementById('iterValue');
+
+    lrSlider.addEventListener('input', () => {
+      lrValue.textContent = lrSlider.value;
+    });
+
+    iterSlider.addEventListener('input', () => {
+      iterValue.textContent = iterSlider.value;
+    });
+
+    // Training simulation
+    const startBtn = document.getElementById('startTraining');
+    const progressBar = document.getElementById('progressBar');
+    const progressPercent = document.getElementById('progressPercent');
+    const accuracy = document.getElementById('accuracy');
+    const precision = document.getElementById('precision');
+    const recall = document.getElementById('recall');
+    const proceedBtn = document.getElementById('proceedBtn');
+
+    let trainingInterval;
+
+    startBtn.addEventListener('click', () => {
+      startBtn.disabled = true;
+      startBtn.textContent = 'Training...';
+      startBtn.classList.add('opacity-50');
+
+      let progress = 0;
+      trainingInterval = setInterval(() => {
+        progress += Math.random() * 15;
+        if (progress > 100) progress = 100;
+
+        progressBar.style.width = progress + '%';
+        progressPercent.textContent = Math.round(progress) + '%';
+
+        // Update metrics
+        if (progress > 20) {
+          accuracy.textContent = (0.85 + Math.random() * 0.1).toFixed(2);
+        }
+        if (progress > 40) {
+          precision.textContent = (0.82 + Math.random() * 0.1).toFixed(2);
+        }
+        if (progress > 60) {
+          recall.textContent = (0.78 + Math.random() * 0.1).toFixed(2);
+        }
+
+        if (progress >= 100) {
+          clearInterval(trainingInterval);
+          startBtn.textContent = 'Training Complete!';
+          proceedBtn.classList.remove('bg-gray-600', 'text-gray-400', 'cursor-not-allowed');
+          proceedBtn.classList.add('bg-indigo-600', 'text-white', 'hover:bg-indigo-700');
+          proceedBtn.removeAttribute('disabled');
+          proceedBtn.href = 'export.html';
+        }
+      }, 500);
+    });
+  </script>
+  <script src="header.js"></script>
+</body>
+</html>

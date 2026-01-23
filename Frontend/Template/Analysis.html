@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Data Analysis - ClickTrain</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+  <style>
+    .hover-lift:hover { transform: translateY(-2px); }
+    .animate-fade-in { animation: fadeIn 0.6s ease-in-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    #plotTypeSelect, #generatePlotBtn {
+      transition: all 0.3s ease;
+    }
+    #correlationHeatmap {
+      min-height: 600px;
+    }
+  </style>
+</head>
+<body class="bg-white text-gray-900">
+  <div id="ml-header"></div>
+
+  <!-- Main Content -->
+  <main class="min-h-screen py-16">
+    <div class="max-w-7xl mx-auto px-4 md:px-8">
+      <div class="text-center mb-12">
+        <h1 class="text-4xl font-bold mb-4">Data Analysis</h1>
+        <p class="text-xl text-gray-600">Comprehensive exploratory data analysis</p>
+      </div>
+
+      <!-- Loading Indicator -->
+      <div id="loadingIndicator" class="text-center py-8">
+        <p class="text-indigo-600">Loading analysis data...</p>
+      </div>
+
+      <!-- Data Summary Cards -->
+      <div id="summaryCards" class="grid md:grid-cols-4 gap-6 mb-12 hidden">
+        <div class="bg-white rounded-xl p-6 border border-gray-200 hover-lift transition-all duration-300 shadow-sm">
+          <div class="text-3xl mb-4">📊</div>
+          <h3 class="text-lg font-semibold mb-2">Dataset Shape</h3>
+          <p class="text-2xl font-bold text-indigo-600" id="shape">-</p>
+          <p class="text-sm text-gray-500">rows × columns</p>
+        </div>
+        <div class="bg-white rounded-xl p-6 border border-gray-200 hover-lift transition-all duration-300 shadow-sm">
+          <div class="text-3xl mb-4">🔢</div>
+          <h3 class="text-lg font-semibold mb-2">Numeric Columns</h3>
+          <p class="text-2xl font-bold text-indigo-600" id="numericCols">-</p>
+          <p class="text-sm text-gray-500">continuous features</p>
+        </div>
+        <div class="bg-white rounded-xl p-6 border border-gray-200 hover-lift transition-all duration-300 shadow-sm">
+          <div class="text-3xl mb-4">📝</div>
+          <h3 class="text-lg font-semibold mb-2">Categorical Columns</h3>
+          <p class="text-2xl font-bold text-indigo-600" id="catCols">-</p>
+          <p class="text-sm text-gray-500">discrete features</p>
+        </div>
+        <div class="bg-white rounded-xl p-6 border border-gray-200 hover-lift transition-all duration-300 shadow-sm">
+          <div class="text-3xl mb-4">❓</div>
+          <h3 class="text-lg font-semibold mb-2">Missing Values</h3>
+          <p class="text-2xl font-bold text-indigo-600" id="missingVals">-</p>
+          <p class="text-sm text-gray-500">total missing</p>
+        </div>
+      </div>
+
+      <!-- Numerical Feature Analysis -->
+      <div id="numericalSection" class="bg-white rounded-xl p-6 border border-gray-200 mb-12 shadow-sm hidden">
+        <h2 class="text-2xl font-semibold mb-6 text-indigo-600">Numerical Feature Analysis</h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm border-collapse">
+            <thead>
+              <tr class="bg-indigo-50">
+                <th class="border border-gray-300 px-4 py-3 text-left font-semibold">Column</th>
+                <th class="border border-gray-300 px-4 py-3 text-center font-semibold">Mean</th>
+                <th class="border border-gray-300 px-4 py-3 text-center font-semibold">Median</th>
+                <th class="border border-gray-300 px-4 py-3 text-center font-semibold">Std</th>
+                <th class="border border-gray-300 px-4 py-3 text-center font-semibold">Min</th>
+                <th class="border border-gray-300 px-4 py-3 text-center font-semibold">Max</th>
+                <th class="border border-gray-300 px-4 py-3 text-center font-semibold">Skewness</th>
+                <th class="border border-gray-300 px-4 py-3 text-center font-semibold">Kurtosis</th>
+              </tr>
+            </thead>
+            <tbody id="numericalTable" class="bg-white">
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Categorical Feature Analysis -->
+      <div id="categoricalSection" class="bg-white rounded-xl p-6 border border-gray-200 mb-12 shadow-sm hidden">
+        <h2 class="text-2xl font-semibold mb-6 text-indigo-600">Categorical Feature Analysis</h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm border-collapse">
+            <thead>
+              <tr class="bg-indigo-50">
+                <th class="border border-gray-300 px-4 py-3 text-left font-semibold">Column</th>
+                <th class="border border-gray-300 px-4 py-3 text-center font-semibold">Unique Values</th>
+                <th class="border border-gray-300 px-4 py-3 text-center font-semibold">Top Category</th>
+                <th class="border border-gray-300 px-4 py-3 text-center font-semibold">Top Freq (%)</th>
+                <th class="border border-gray-300 px-4 py-3 text-center font-semibold">Low Freq (%)</th>
+                <th class="border border-gray-300 px-4 py-3 text-center font-semibold">Missing</th>
+                <th class="border border-gray-300 px-4 py-3 text-center font-semibold">Missing (%)</th>
+                <th class="border border-gray-300 px-4 py-3 text-center font-semibold">Cardinality</th>
+              </tr>
+            </thead>
+            <tbody id="categoricalTable" class="bg-white">
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Correlation Analysis -->
+      <div id="correlationSection" class="bg-white rounded-xl p-6 border border-gray-200 mb-12 shadow-sm hidden">
+        <h2 class="text-2xl font-semibold mb-6 text-indigo-600">Correlation Analysis</h2>
+        
+        <!-- Correlation Heatmap -->
+        <div id="correlationHeatmap" class="mb-8"></div>
+        
+        <!-- Top Correlations -->
+        <div id="topCorrelations" class="mt-6">
+          <h3 class="text-xl font-semibold mb-4 text-indigo-600">Top 5 Strongest Positive Correlations</h3>
+          <div id="topCorrList" class="space-y-2"></div>
+        </div>
+      </div>
+
+      <!-- Custom Visualization Builder -->
+      <div id="customVizSection" class="bg-white rounded-xl p-6 border border-gray-200 mb-12 shadow-sm hidden">
+        <h2 class="text-2xl font-semibold mb-6 text-indigo-600">Custom Visualization Builder</h2>
+        
+        <div class="grid md:grid-cols-4 gap-4 mb-6">
+          <div>
+            <label class="block text-sm font-medium mb-2 text-gray-700">X-Axis Feature</label>
+            <select id="xAxisSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+              <option value="">Select X-axis...</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-2 text-gray-700">Y-Axis Feature</label>
+            <select id="yAxisSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+              <option value="">Select Y-axis...</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-2 text-gray-700">Hue/Color Feature (Optional)</label>
+            <select id="hueSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+              <option value="">Select hue...</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-2 text-gray-700">Plot Type</label>
+            <select id="plotTypeSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+              <option value="">Select plot type...</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="text-center mb-4">
+          <button id="generatePlotBtn" class="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+            Generate Plot
+          </button>
+        </div>
+
+        <div id="customPlotContainer" class="mt-6"></div>
+      </div>
+
+      <!-- Navigation -->
+      <div class="flex justify-between flex-wrap gap-4">
+        <a href="upload.html" class="px-6 py-3 bg-gray-700 text-white rounded-xl hover:bg-gray-600 transition-colors duration-300">
+          ← Back to Upload
+        </a>
+        <a href="preprocessing.html" id="nextLink" class="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors duration-300">
+          Proceed to Preprocessing →
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <!-- Scripts -->
+  <script>
+    let sessionId = null;
+    let allColumns = [];
+    let numericalColumns = [];
+    let categoricalColumns = [];
+    let correlationMatrix = null;
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      sessionId = urlParams.get('session_id') || localStorage.getItem('session_id');
+
+      if (!sessionId) {
+        alert('No session ID found. Please upload a dataset first.');
+        window.location.href = 'upload.html';
+        return;
+      }
+
+      loadAnalysisData();
+    });
+
+    async function loadAnalysisData() {
+      try {
+        const response = await fetch(`http://127.0.0.1:8001/api/eda/${sessionId}`);
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+          if (response.status === 404) {
+            alert(`Session not found. Please upload your dataset again.\n\nError: ${errorData.detail || 'Session expired or not found'}`);
+            window.location.href = 'upload.html';
+            return;
+          }
+          throw new Error(`HTTP ${response.status}: ${errorData.detail || 'Failed to load analysis data'}`);
+        }
+        
+        const data = await response.json();
+
+        if (data.statistics) {
+          const stats = data.statistics;
+          
+          // Update summary cards
+          document.getElementById('shape').textContent = `${stats.shape[0]} × ${stats.shape[1]}`;
+          numericalColumns = stats.numerical_columns || [];
+          categoricalColumns = stats.categorical_columns || [];
+          allColumns = stats.columns || [];
+          
+          document.getElementById('numericCols').textContent = numericalColumns.length;
+          document.getElementById('catCols').textContent = categoricalColumns.length;
+          document.getElementById('missingVals').textContent = Object.values(stats.missing_values || {}).reduce((a, b) => a + b, 0);
+
+          // Show sections
+          document.getElementById('loadingIndicator').classList.add('hidden');
+          document.getElementById('summaryCards').classList.remove('hidden');
+
+          // Load numerical stats
+          if (stats.numerical_stats && stats.numerical_stats.length > 0) {
+            renderNumericalTable(stats.numerical_stats);
+            document.getElementById('numericalSection').classList.remove('hidden');
+          }
+
+          // Load categorical stats
+          if (stats.categorical_stats && stats.categorical_stats.length > 0) {
+            renderCategoricalTable(stats.categorical_stats);
+            document.getElementById('categoricalSection').classList.remove('hidden');
+          }
+
+          // Load correlation
+          if (stats.correlation_matrix) {
+            correlationMatrix = stats.correlation_matrix;
+            renderCorrelationHeatmap(stats.correlation_matrix, numericalColumns);
+            if (stats.top_correlations) {
+              renderTopCorrelations(stats.top_correlations);
+            }
+            document.getElementById('correlationSection').classList.remove('hidden');
+          }
+
+          // Setup custom visualization builder
+          setupCustomVizBuilder();
+          document.getElementById('customVizSection').classList.remove('hidden');
+
+          // Update navigation link
+          document.getElementById('nextLink').href = `preprocessing.html?session_id=${sessionId}`;
+
+        } else {
+          throw new Error('Invalid response format');
+        }
+      } catch (error) {
+        console.error('Analysis error:', error);
+        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+          alert('Failed to connect to backend server. Please make sure:\n1. Backend server is running on port 8001\n2. CORS is enabled\n3. No firewall is blocking the connection');
+        } else {
+          alert(`Failed to load Analysis data: ${error.message}\n\nPlease check if the backend server is running on port 8001.`);
+        }
+      }
+    }
+
+    function renderNumericalTable(stats) {
+      const tbody = document.getElementById('numericalTable');
+      tbody.innerHTML = '';
+
+      stats.forEach(stat => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-indigo-50 transition-colors';
+        tr.innerHTML = `
+          <td class="border border-gray-300 px-4 py-2 font-medium">${stat.column}</td>
+          <td class="border border-gray-300 px-4 py-2 text-center">${stat.mean.toFixed(4)}</td>
+          <td class="border border-gray-300 px-4 py-2 text-center">${stat.median.toFixed(4)}</td>
+          <td class="border border-gray-300 px-4 py-2 text-center">${stat.std.toFixed(4)}</td>
+          <td class="border border-gray-300 px-4 py-2 text-center">${stat.min.toFixed(4)}</td>
+          <td class="border border-gray-300 px-4 py-2 text-center">${stat.max.toFixed(4)}</td>
+          <td class="border border-gray-300 px-4 py-2 text-center">${stat.skewness.toFixed(4)}</td>
+          <td class="border border-gray-300 px-4 py-2 text-center">${stat.kurtosis.toFixed(4)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderCategoricalTable(stats) {
+      const tbody = document.getElementById('categoricalTable');
+      tbody.innerHTML = '';
+
+      stats.forEach(stat => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-indigo-50 transition-colors';
+        const cardinalityClass = stat.cardinality === 'low' ? 'text-green-600' : stat.cardinality === 'medium' ? 'text-yellow-600' : 'text-red-600';
+        tr.innerHTML = `
+          <td class="border border-gray-300 px-4 py-2 font-medium">${stat.column}</td>
+          <td class="border border-gray-300 px-4 py-2 text-center">${stat.unique_values}</td>
+          <td class="border border-gray-300 px-4 py-2 text-center">${stat.top_category}</td>
+          <td class="border border-gray-300 px-4 py-2 text-center">${stat.top_frequency_pct.toFixed(2)}%</td>
+          <td class="border border-gray-300 px-4 py-2 text-center">${stat.low_frequency_pct.toFixed(2)}%</td>
+          <td class="border border-gray-300 px-4 py-2 text-center">${stat.missing_count}</td>
+          <td class="border border-gray-300 px-4 py-2 text-center">${stat.missing_pct.toFixed(2)}%</td>
+          <td class="border border-gray-300 px-4 py-2 text-center ${cardinalityClass} font-semibold">${stat.cardinality}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderCorrelationHeatmap(corrMatrix, columns) {
+      const values = columns.map(col => columns.map(col2 => corrMatrix[col]?.[col2] || 0));
+      
+      // Calculate dynamic size based on number of columns
+      const numCols = columns.length;
+      const cellSize = Math.max(30, Math.min(60, 800 / numCols)); // Between 30-60px per cell
+      const heatmapHeight = Math.max(600, numCols * cellSize + 200);
+      const heatmapWidth = Math.max(800, numCols * cellSize + 200);
+      const fontSize = Math.max(8, Math.min(12, 400 / numCols));
+      
+      const data = [{
+        z: values,
+        x: columns,
+        y: columns,
+        type: 'heatmap',
+        colorscale: [[0, '#3b82f6'], [0.5, '#ffffff'], [1, '#ef4444']],
+        zmid: 0,
+        text: values.map(row => row.map(v => v.toFixed(3))),
+        texttemplate: numCols <= 15 ? '%{text}' : '',
+        textfont: { size: fontSize },
+        hovertemplate: '%{x} vs %{y}<br>Correlation: %{z:.3f}<extra></extra>',
+        showscale: true,
+        colorbar: {
+          len: 0.8,
+          thickness: 15,
+          x: 1.15,
+          y: 0.5
+        }
+      }];
+
+      const layout = {
+        title: {
+          text: 'Correlation Heatmap',
+          font: { size: 20, color: '#4f46e5' },
+          x: 0.5,
+          xanchor: 'center'
+        },
+        xaxis: { 
+          title: '',
+          side: 'bottom',
+          tickangle: -45,
+          tickfont: { size: Math.max(9, Math.min(12, 300 / numCols)) }
+        },
+        yaxis: { 
+          title: '',
+          tickfont: { size: Math.max(9, Math.min(12, 300 / numCols)) }
+        },
+        margin: { l: Math.max(120, numCols * 8), r: 120, t: 80, b: Math.max(120, numCols * 8) },
+        width: heatmapWidth,
+        height: heatmapHeight,
+        autosize: false
+      };
+
+      const config = {
+        responsive: true,
+        displayModeBar: true,
+        modeBarButtonsToAdd: ['resetScale2d'],
+        displaylogo: false,
+        modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+        toImageButtonOptions: {
+          format: 'png',
+          filename: 'correlation_heatmap',
+          height: heatmapHeight,
+          width: heatmapWidth,
+          scale: 1
+        }
+      };
+
+      // Position modebar at top-right
+      Plotly.newPlot('correlationHeatmap', data, layout, config).then(() => {
+        const modebar = document.querySelector('#correlationHeatmap .modebar');
+        if (modebar) {
+          modebar.style.position = 'absolute';
+          modebar.style.top = '10px';
+          modebar.style.right = '10px';
+          modebar.style.left = 'auto';
+          modebar.style.bottom = 'auto';
+        }
+      });
+    }
+
+    function renderTopCorrelations(topCorr) {
+      const container = document.getElementById('topCorrList');
+      container.innerHTML = '';
+
+      topCorr.forEach((corr, idx) => {
+        const div = document.createElement('div');
+        div.className = 'bg-indigo-50 rounded-lg p-4 border border-indigo-200';
+        div.innerHTML = `
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-indigo-900">${idx + 1}. ${corr.column1} ↔ ${corr.column2}</span>
+            <span class="text-lg font-bold text-indigo-600">${corr.correlation.toFixed(4)}</span>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    function setupCustomVizBuilder() {
+      const xSelect = document.getElementById('xAxisSelect');
+      const ySelect = document.getElementById('yAxisSelect');
+      const hueSelect = document.getElementById('hueSelect');
+      const plotTypeSelect = document.getElementById('plotTypeSelect');
+      const generateBtn = document.getElementById('generatePlotBtn');
+
+      // Populate dropdowns
+      allColumns.forEach(col => {
+        const option1 = new Option(col, col);
+        const option2 = new Option(col, col);
+        xSelect.add(option1);
+        ySelect.add(option2);
+      });
+      
+      // Hue dropdown only shows categorical columns
+      categoricalColumns.forEach(col => {
+        const option = new Option(col, col);
+        hueSelect.add(option);
+      });
+      
+      // If no categorical columns, disable hue dropdown
+      if (categoricalColumns.length === 0) {
+        hueSelect.disabled = true;
+        hueSelect.innerHTML = '<option value="">No categorical columns available</option>';
+      }
+
+      // Update plot types based on selections
+      function updatePlotTypes() {
+        const xVal = xSelect.value;
+        const yVal = ySelect.value;
+        const hueVal = hueSelect.value;
+        const plotTypeVal = plotTypeSelect.value;
+        
+        // Store current plot type value before clearing
+        const currentPlotType = plotTypeSelect.value;
+        
+        plotTypeSelect.innerHTML = '<option value="">Select plot type...</option>';
+        generateBtn.disabled = true;
+        
+        // Remove red styling initially
+        plotTypeSelect.classList.remove('border-red-500', 'bg-red-50');
+        plotTypeSelect.classList.add('border-gray-300');
+        generateBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
+        generateBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+
+        const selectedCount = [xVal, yVal, hueVal].filter(v => v).length;
+
+        if (selectedCount === 1) {
+          // Univariate plots
+          const plots = ['Histogram', 'Box Plot', 'Violin Plot', 'Count Plot'];
+          plots.forEach(plot => {
+            const option = new Option(plot, plot.toLowerCase().replace(' ', '_'));
+            plotTypeSelect.add(option);
+          });
+          // Restore previous selection if it exists
+          if (currentPlotType) {
+            plotTypeSelect.value = currentPlotType;
+          }
+          if (xVal && plotTypeSelect.value) {
+            generateBtn.disabled = false;
+          } else if (xVal) {
+            // X selected but plot type not selected - show red indicator
+            plotTypeSelect.classList.add('border-red-500', 'bg-red-50');
+            generateBtn.classList.add('bg-red-600', 'hover:bg-red-700');
+            generateBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+          }
+        } else if (selectedCount === 2) {
+          // Bivariate plots
+          const plots = ['Scatter Plot', 'Line Plot', 'Box Plot', 'Violin Plot'];
+          plots.forEach(plot => {
+            const option = new Option(plot, plot.toLowerCase().replace(' ', '_'));
+            plotTypeSelect.add(option);
+          });
+          // Restore previous selection if it exists
+          if (currentPlotType) {
+            plotTypeSelect.value = currentPlotType;
+          }
+          if (xVal && yVal && plotTypeSelect.value) {
+            generateBtn.disabled = false;
+          } else if (xVal && yVal) {
+            // X and Y selected but plot type not selected - show red indicator
+            plotTypeSelect.classList.add('border-red-500', 'bg-red-50');
+            generateBtn.classList.add('bg-red-600', 'hover:bg-red-700');
+            generateBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+          }
+        } else if (selectedCount === 3) {
+          // Multivariate plots
+          const plots = ['Colored Scatter Plot', 'Grouped Box Plot', 'Grouped Violin Plot'];
+          plots.forEach(plot => {
+            const option = new Option(plot, plot.toLowerCase().replace(' ', '_'));
+            plotTypeSelect.add(option);
+          });
+          // Restore previous selection if it exists
+          if (currentPlotType) {
+            plotTypeSelect.value = currentPlotType;
+          }
+          if (plotTypeSelect.value) {
+            generateBtn.disabled = false;
+          } else {
+            // All features selected but plot type not selected - show red indicator
+            plotTypeSelect.classList.add('border-red-500', 'bg-red-50');
+            generateBtn.classList.add('bg-red-600', 'hover:bg-red-700');
+            generateBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+          }
+        }
+      }
+
+      // Disable selected options in other dropdowns
+      function updateDropdownStates() {
+        const xVal = xSelect.value;
+        const yVal = ySelect.value;
+        const hueVal = hueSelect.value;
+
+        Array.from(xSelect.options).forEach(opt => {
+          opt.disabled = (opt.value && (opt.value === yVal || opt.value === hueVal));
+        });
+        Array.from(ySelect.options).forEach(opt => {
+          opt.disabled = (opt.value && (opt.value === xVal || opt.value === hueVal));
+        });
+        Array.from(hueSelect.options).forEach(opt => {
+          opt.disabled = (opt.value && (opt.value === xVal || opt.value === yVal));
+        });
+
+        updatePlotTypes();
+      }
+
+      xSelect.addEventListener('change', updateDropdownStates);
+      ySelect.addEventListener('change', updateDropdownStates);
+      hueSelect.addEventListener('change', updateDropdownStates);
+      plotTypeSelect.addEventListener('change', function() {
+        updatePlotTypes();
+        // Remove red styling when plot type is selected
+        if (plotTypeSelect.value) {
+          plotTypeSelect.classList.remove('border-red-500', 'bg-red-50');
+          plotTypeSelect.classList.add('border-gray-300');
+          const xVal = xSelect.value;
+          const yVal = ySelect.value;
+          const hueVal = hueSelect.value;
+          const selectedCount = [xVal, yVal, hueVal].filter(v => v).length;
+          if ((selectedCount === 1 && xVal) || (selectedCount === 2 && xVal && yVal) || selectedCount === 3) {
+            generateBtn.disabled = false;
+            generateBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
+            generateBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+          }
+        }
+      });
+
+      generateBtn.addEventListener('click', generateCustomPlot);
+    }
+
+    async function generateCustomPlot() {
+      const xCol = document.getElementById('xAxisSelect').value;
+      const yCol = document.getElementById('yAxisSelect').value;
+      const hueCol = document.getElementById('hueSelect').value || null;
+      const plotType = document.getElementById('plotTypeSelect').value;
+
+      if (!xCol || !plotType) return;
+
+      try {
+        let url = `http://127.0.0.1:8001/api/eda/${sessionId}/plot-data?x_col=${xCol}`;
+        if (yCol) url += `&y_col=${yCol}`;
+        if (hueCol) url += `&hue_col=${hueCol}`;
+
+        const response = await fetch(url);
+        const data = await response.json();
+
+        const container = document.getElementById('customPlotContainer');
+        container.innerHTML = '';
+
+        let plotData = [];
+        let layout = {
+          title: { text: plotType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), font: { size: 18, color: '#4f46e5' } },
+          xaxis: { title: xCol },
+          margin: { l: 60, r: 20, t: 60, b: 60 },
+          height: 500
+        };
+
+        if (!yCol) {
+          // Univariate plots
+          const xData = (data.data || data.x_data || []).filter(v => v !== null && v !== undefined);
+          if (plotType === 'histogram') {
+            plotData = [{
+              x: xData,
+              type: 'histogram',
+              marker: { color: '#4f46e5' }
+            }];
+          } else if (plotType === 'box_plot') {
+            plotData = [{
+              y: xData,
+              type: 'box',
+              marker: { color: '#4f46e5' }
+            }];
+            layout.xaxis = { title: '' };
+            layout.yaxis = { title: xCol };
+          } else if (plotType === 'violin_plot') {
+            plotData = [{
+              y: xData,
+              type: 'violin',
+              marker: { color: '#4f46e5' }
+            }];
+            layout.xaxis = { title: '' };
+            layout.yaxis = { title: xCol };
+          } else if (plotType === 'count_plot') {
+            const counts = {};
+            xData.forEach(val => counts[val] = (counts[val] || 0) + 1);
+            plotData = [{
+              x: Object.keys(counts),
+              y: Object.values(counts),
+              type: 'bar',
+              marker: { color: '#4f46e5' }
+            }];
+            layout.xaxis = { title: xCol };
+            layout.yaxis = { title: 'Count' };
+          }
+        } else {
+          // Bivariate/Multivariate plots
+          const rawXData = data.x_data || [];
+          const rawYData = data.y_data || [];
+          const xData = [];
+          const yData = [];
+          
+          // Filter out null/undefined pairs
+          for (let i = 0; i < rawXData.length; i++) {
+            if (rawXData[i] !== null && rawXData[i] !== undefined && 
+                rawYData[i] !== null && rawYData[i] !== undefined) {
+              xData.push(rawXData[i]);
+              yData.push(rawYData[i]);
+            }
+          }
+
+          if (hueCol) {
+            // Multivariate
+            const hueData = data.hue_data;
+            const uniqueHues = [...new Set(hueData)];
+            const colors = ['#4f46e5', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+            
+            uniqueHues.forEach((hue, idx) => {
+              const filteredX = [];
+              const filteredY = [];
+              
+              for (let i = 0; i < hueData.length; i++) {
+                if (hueData[i] === hue && xData[i] !== null && yData[i] !== null) {
+                  filteredX.push(xData[i]);
+                  filteredY.push(yData[i]);
+                }
+              }
+              
+              if (plotType === 'colored_scatter_plot') {
+                plotData.push({
+                  x: filteredX,
+                  y: filteredY,
+                  mode: 'markers',
+                  type: 'scatter',
+                  name: String(hue),
+                  marker: { size: 8, color: colors[idx % colors.length] }
+                });
+              } else if (plotType === 'grouped_box_plot') {
+                plotData.push({
+                  y: filteredY,
+                  x: filteredX.map(() => String(hue)),
+                  type: 'box',
+                  name: String(hue),
+                  marker: { color: colors[idx % colors.length] }
+                });
+              } else if (plotType === 'grouped_violin_plot') {
+                plotData.push({
+                  y: filteredY,
+                  x: filteredX.map(() => String(hue)),
+                  type: 'violin',
+                  name: String(hue),
+                  marker: { color: colors[idx % colors.length] }
+                });
+              }
+            });
+            layout.legend = { x: 1.02, y: 1 };
+            layout.yaxis = { title: yCol };
+          } else {
+            // Bivariate
+            if (plotType === 'scatter_plot') {
+              plotData = [{
+                x: xData,
+                y: yData,
+                mode: 'markers',
+                type: 'scatter',
+                marker: { color: '#4f46e5', size: 6 }
+              }];
+              layout.yaxis = { title: yCol };
+            } else if (plotType === 'line_plot') {
+              plotData = [{
+                x: xData,
+                y: yData,
+                type: 'scatter',
+                mode: 'lines+markers',
+                marker: { color: '#4f46e5' }
+              }];
+              layout.yaxis = { title: yCol };
+            } else if (plotType === 'box_plot') {
+              plotData = [{
+                y: yData,
+                x: xData,
+                type: 'box',
+                marker: { color: '#4f46e5' }
+              }];
+              layout.yaxis = { title: yCol };
+            } else if (plotType === 'violin_plot') {
+              plotData = [{
+                y: yData,
+                x: xData,
+                type: 'violin',
+                marker: { color: '#4f46e5' }
+              }];
+              layout.yaxis = { title: yCol };
+            }
+          }
+        }
+
+        const config = {
+          responsive: true,
+          displayModeBar: true,
+          modeBarButtonsToAdd: ['resetScale2d'],
+          displaylogo: false,
+          modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+          toImageButtonOptions: {
+            format: 'png',
+            filename: 'plot',
+            height: 500,
+            width: 800,
+            scale: 1
+          }
+        };
+        
+        // Position modebar at top-right
+        Plotly.newPlot(container, plotData, layout, config).then(() => {
+          const modebar = container.querySelector('.modebar');
+          if (modebar) {
+            modebar.style.top = '10px';
+            modebar.style.right = '10px';
+            modebar.style.left = 'auto';
+            modebar.style.bottom = 'auto';
+          }
+        });
+      } catch (error) {
+        console.error('Plot generation error:', error);
+        alert('Failed to generate plot. Please check the console for details.');
+      }
+    }
+  </script>
+  <script src="header.js"></script>
+</body>
+</html>

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Model Export - ClickTrain</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .hover-lift:hover { transform: translateY(-2px); }
+    .animate-fade-in { animation: fadeIn 0.6s ease-in-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body class="bg-white text-gray-900">
+  <div id="ml-header"></div>
+
+  <!-- Main Content -->
+  <main class="min-h-screen py-16">
+    <div class="max-w-6xl mx-auto px-8">
+      <div class="text-center mb-12">
+        <h1 class="text-4xl font-bold mb-4">Model Export</h1>
+        <p class="text-xl text-gray-600">Download your trained model and deploy it</p>
+      </div>
+
+      <!-- Model Performance Summary -->
+      <div class="bg-white rounded-xl p-6 border border-gray-200 mb-8 shadow-sm">
+        <h3 class="text-2xl font-semibold mb-6">Model Performance</h3>
+        <div class="grid md:grid-cols-4 gap-6">
+          <div class="text-center">
+            <div class="text-3xl font-bold text-green-600">87.5%</div>
+            <div class="text-sm text-gray-600">Accuracy</div>
+          </div>
+          <div class="text-center">
+            <div class="text-3xl font-bold text-blue-600">84.2%</div>
+            <div class="text-sm text-gray-600">Precision</div>
+          </div>
+          <div class="text-center">
+            <div class="text-3xl font-bold text-yellow-600">82.1%</div>
+            <div class="text-sm text-gray-600">Recall</div>
+          </div>
+          <div class="text-center">
+            <div class="text-3xl font-bold text-purple-600">0.83</div>
+            <div class="text-sm text-gray-600">F1-Score</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Export Options -->
+      <div class="grid md:grid-cols-2 gap-8 mb-12">
+        <!-- Download Model -->
+        <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+          <h3 class="text-xl font-semibold mb-4">Download Model</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium mb-2">Format</label>
+              <select class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900">
+                <option>Pickle (.pkl)</option>
+                <option>Joblib (.joblib)</option>
+                <option>ONNX (.onnx)</option>
+                <option>TensorFlow SavedModel</option>
+              </select>
+            </div>
+            <button class="w-full px-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors duration-300">
+              Download Model File
+            </button>
+          </div>
+        </div>
+
+        <!-- API Deployment -->
+        <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+          <h3 class="text-xl font-semibold mb-4">API Deployment</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium mb-2">Framework</label>
+              <select class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900">
+                <option>Flask</option>
+                <option>FastAPI</option>
+                <option>Django</option>
+              </select>
+            </div>
+            <button class="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-300">
+              Generate API Code
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Code Snippet -->
+      <div class="bg-white rounded-xl p-6 border border-gray-200 mb-8 shadow-sm">
+        <h3 class="text-2xl font-semibold mb-6">Integration Code</h3>
+        <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+          <pre class="text-sm text-gray-800 overflow-x-auto"><code># Load the model
+import joblib
+model = joblib.load('model.joblib')
+
+# Make predictions
+predictions = model.predict(new_data)
+
+# For API usage
+import requests
+response = requests.post('https://your-api-endpoint.com/predict',
+                        json={'data': new_data.to_dict()})
+result = response.json()</code></pre>
+        </div>
+        <button class="mt-4 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors duration-300 border border-gray-200">
+          Copy Code
+        </button>
+      </div>
+
+      <!-- Model Details -->
+      <div class="bg-white rounded-xl p-6 border border-gray-200 mb-12 shadow-sm">
+        <h3 class="text-2xl font-semibold mb-6">Model Details</h3>
+        <div class="grid md:grid-cols-2 gap-6">
+          <div>
+            <h4 class="font-semibold mb-2">Algorithm</h4>
+            <p class="text-gray-700">Random Forest Classifier</p>
+          </div>
+          <div>
+            <h4 class="font-semibold mb-2">Training Time</h4>
+            <p class="text-gray-700">2.3 seconds</p>
+          </div>
+          <div>
+            <h4 class="font-semibold mb-2">Features Used</h4>
+            <p class="text-gray-700">5 (after preprocessing)</p>
+          </div>
+          <div>
+            <h4 class="font-semibold mb-2">Model Size</h4>
+            <p class="text-gray-700">1.2 MB</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation -->
+      <div class="flex justify-between">
+        <a href="training.html" class="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors duration-300 border border-gray-200">
+          ← Back to Training
+        </a>
+        <a href="../../index.html" class="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors duration-300">
+          Start New Project →
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <!-- Scripts -->
+  <script>
+    const mobileToggle = document.getElementById('mobileMenuToggle');
+    const mobileMenu = document.getElementById('mobileMenu');
+    mobileToggle.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+    });
+  </script>
+  <script src="header.js"></script>
+</body>
+</html>
