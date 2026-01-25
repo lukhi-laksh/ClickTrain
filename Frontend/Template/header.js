@@ -98,6 +98,5 @@ function createMLHeader() {
     });
   }
 }
-
 // Initialize header when DOM is loaded
 document.addEventListener('DOMContentLoaded', createMLHeader);
