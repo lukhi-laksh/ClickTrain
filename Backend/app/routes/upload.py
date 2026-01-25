@@ -3,9 +3,11 @@ import pandas as pd
 import os
 import uuid
 from ..services.data_service import DataService
+from ..services.preprocessing_engine import PreprocessingEngine
 
 router = APIRouter()
 data_service = DataService()
+preprocessing_engine = PreprocessingEngine()
 
 @router.post("/upload")
 async def upload_dataset(file: UploadFile = File(...)):
@@ -31,6 +33,9 @@ async def upload_dataset(file: UploadFile = File(...)):
 
         # Store the dataframe in memory (full dataset with stringified column names)
         data_service.store_data(session_id, df)
+        
+        # Initialize preprocessing engine with the dataset
+        preprocessing_engine.initialize_dataset(session_id, df, file.filename)
 
         # Build a lightweight preview (first 5 rows) for the frontend
         head_df = df.head(5)
