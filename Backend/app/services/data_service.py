@@ -1,4 +1,6 @@
 import pandas as pd
+import pickle
+import os
 from typing import Dict
 
 class DataService:
@@ -9,6 +11,7 @@ class DataService:
     """
     _instance = None
     _initialized = False
+    DATA_FILE = "data_store.pkl"
     
     def __new__(cls):
         if cls._instance is None:
@@ -19,11 +22,35 @@ class DataService:
         if not DataService._initialized:
             self.data_store: Dict[str, pd.DataFrame] = {}
             self.processed_data_store: Dict[str, Dict] = {}  # For preprocessed data splits
+            self._load_data()
             DataService._initialized = True
+
+    def _load_data(self):
+        """Load data from file if exists."""
+        if os.path.exists(self.DATA_FILE):
+            try:
+                with open(self.DATA_FILE, 'rb') as f:
+                    data = pickle.load(f)
+                    self.data_store = data.get('data_store', {})
+                    self.processed_data_store = data.get('processed_data_store', {})
+            except Exception as e:
+                print(f"Error loading data: {e}")
+
+    def _save_data(self):
+        """Save data to file."""
+        try:
+            with open(self.DATA_FILE, 'wb') as f:
+                pickle.dump({
+                    'data_store': self.data_store,
+                    'processed_data_store': self.processed_data_store
+                }, f)
+        except Exception as e:
+            print(f"Error saving data: {e}")
 
     def store_data(self, session_id: str, df: pd.DataFrame):
         """Store the uploaded dataset"""
         self.data_store[session_id] = df.copy()
+        self._save_data()
 
     def get_data(self, session_id: str) -> pd.DataFrame:
         """Retrieve the dataset for a session"""
@@ -34,6 +61,7 @@ class DataService:
     def store_processed_data(self, session_id: str, processed_data: Dict):
         """Store preprocessed data splits"""
         self.processed_data_store[session_id] = processed_data
+        self._save_data()
 
     def get_processed_data(self, session_id: str) -> Dict:
         """Retrieve preprocessed data splits"""
@@ -47,3 +75,4 @@ class DataService:
             del self.data_store[session_id]
         if session_id in self.processed_data_store:
             del self.processed_data_store[session_id]
+        self._save_data()

@@ -4,6 +4,8 @@ AuditLogger: Tracks all preprocessing actions for audit and reproducibility.
 from typing import Dict, List, Optional
 from datetime import datetime
 from enum import Enum
+import pickle
+import os
 
 
 class ActionType(Enum):
@@ -27,6 +29,7 @@ class AuditLogger:
     
     _instance = None
     _initialized = False
+    DATA_FILE = "audit_logger.pkl"
     
     def __new__(cls):
         if cls._instance is None:
@@ -37,7 +40,25 @@ class AuditLogger:
         if not AuditLogger._initialized:
             # Store logs per session: {session_id: [LogEntry]}
             self.logs: Dict[str, List[Dict]] = {}
+            self._load_data()
             AuditLogger._initialized = True
+
+    def _load_data(self):
+        """Load data from file if exists."""
+        if os.path.exists(self.DATA_FILE):
+            try:
+                with open(self.DATA_FILE, 'rb') as f:
+                    self.logs = pickle.load(f)
+            except Exception as e:
+                print(f"Error loading audit logger data: {e}")
+
+    def _save_data(self):
+        """Save data to file."""
+        try:
+            with open(self.DATA_FILE, 'wb') as f:
+                pickle.dump(self.logs, f)
+        except Exception as e:
+            print(f"Error saving audit logger data: {e}")
     
     def log_action(
         self,
@@ -72,6 +93,7 @@ class AuditLogger:
         }
         
         self.logs[session_id].append(log_entry)
+        self._save_data()
     
     def get_logs(self, session_id: str, limit: Optional[int] = None) -> List[Dict]:
         """

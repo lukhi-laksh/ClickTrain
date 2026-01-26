@@ -6,6 +6,8 @@ import numpy as np
 from typing import Dict, Optional, Tuple
 from datetime import datetime
 import copy
+import pickle
+import os
 
 
 class DatasetVersion:
@@ -30,6 +32,7 @@ class DatasetManager:
     
     _instance = None
     _initialized = False
+    DATA_FILE = "dataset_manager.pkl"
     
     def __new__(cls):
         if cls._instance is None:
@@ -53,7 +56,36 @@ class DatasetManager:
             # Metadata: {session_id: {'original_shape': ..., 'original_columns': ...}}
             self.metadata: Dict[str, Dict] = {}
             
+            self._load_data()
             DatasetManager._initialized = True
+
+    def _load_data(self):
+        """Load data from file if exists."""
+        if os.path.exists(self.DATA_FILE):
+            try:
+                with open(self.DATA_FILE, 'rb') as f:
+                    data = pickle.load(f)
+                    self.original_datasets = data.get('original_datasets', {})
+                    self.current_datasets = data.get('current_datasets', {})
+                    self.version_history = data.get('version_history', {})
+                    self.version_stacks = data.get('version_stacks', {})
+                    self.metadata = data.get('metadata', {})
+            except Exception as e:
+                print(f"Error loading dataset manager data: {e}")
+
+    def _save_data(self):
+        """Save data to file."""
+        try:
+            with open(self.DATA_FILE, 'wb') as f:
+                pickle.dump({
+                    'original_datasets': self.original_datasets,
+                    'current_datasets': self.current_datasets,
+                    'version_history': self.version_history,
+                    'version_stacks': self.version_stacks,
+                    'metadata': self.metadata
+                }, f)
+        except Exception as e:
+            print(f"Error saving dataset manager data: {e}")
     
     def initialize_session(self, session_id: str, df: pd.DataFrame, dataset_name: str = None):
         """
@@ -89,6 +121,7 @@ class DatasetManager:
             metadata={'description': 'Original dataset'}
         )
         self.version_history[session_id].append(initial_version)
+        self._save_data()
     
     def get_original(self, session_id: str) -> pd.DataFrame:
         """Get the original (immutable) dataset."""
@@ -133,6 +166,7 @@ class DatasetManager:
         # Clear redo stack (new action invalidates redo)
         self.version_stacks[session_id]['redo'] = []
         
+        self._save_data()
         return version_id
     
     def get_version(self, session_id: str, version_id: int) -> DatasetVersion:
@@ -171,6 +205,7 @@ class DatasetManager:
         # Restore dataset
         self.current_datasets[session_id] = previous_version.df.copy()
         
+        self._save_data()
         return previous_version
     
     def redo(self, session_id: str) -> Optional[DatasetVersion]:
@@ -197,6 +232,7 @@ class DatasetManager:
         # Restore dataset
         self.current_datasets[session_id] = version.df.copy()
         
+        self._save_data()
         return version
     
     def reset_to_original(self, session_id: str) -> DatasetVersion:
@@ -212,6 +248,7 @@ class DatasetManager:
             'redo': []
         }
         
+        self._save_data()
         # Get initial version
         return self.get_version(session_id, 0)
     
