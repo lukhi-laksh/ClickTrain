@@ -198,7 +198,7 @@
 
     async function loadAnalysisData() {
       try {
-        const response = await fetch(`http://127.0.0.1:8001/api/eda/${sessionId}`);
+        const response = await fetch(`http://127.0.0.1:8000/api/eda/${sessionId}`);
         
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
@@ -264,9 +264,9 @@
       } catch (error) {
         console.error('Analysis error:', error);
         if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-          alert('Failed to connect to backend server. Please make sure:\n1. Backend server is running on port 8001\n2. CORS is enabled\n3. No firewall is blocking the connection');
+          alert('Failed to connect to backend server. Please make sure:\n1. Backend server is running on port 8000\n2. CORS is enabled\n3. No firewall is blocking the connection');
         } else {
-          alert(`Failed to load Analysis data: ${error.message}\n\nPlease check if the backend server is running on port 8001.`);
+          alert(`Failed to load Analysis data: ${error.message}\n\nPlease check if the backend server is running on port 8000.`);
         }
       }
     }
@@ -572,7 +572,7 @@
       if (!xCol || !plotType) return;
 
       try {
-        let url = `http://127.0.0.1:8001/api/eda/${sessionId}/plot-data?x_col=${xCol}`;
+        let url = `http://127.0.0.1:8000/api/eda/${sessionId}/plot-data?x_col=${xCol}`;
         if (yCol) url += `&y_col=${yCol}`;
         if (hueCol) url += `&hue_col=${hueCol}`;
 
