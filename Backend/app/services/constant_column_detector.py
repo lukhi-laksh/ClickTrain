@@ -21,41 +21,39 @@ class ConstantColumnDetector:
     def detect_constant_columns(self, df: pd.DataFrame) -> Dict:
         """
         Detect constant columns (zero variance).
-        Returns list of constant columns with their constant values.
+        Vectorized: computes nunique for all columns in one pass.
         """
+        # Single vectorized call — far faster than a per-column nunique loop
+        unique_counts = df.nunique()
         constant_columns = []
-        
+
         for col in df.columns:
-            # Check if column has constant values
-            unique_values = df[col].nunique()
-            
-            if unique_values <= 1:
-                # Constant column
+            uc = unique_counts[col]
+            if uc <= 1:
                 constant_value = df[col].iloc[0] if len(df) > 0 else None
                 constant_columns.append({
                     'column': col,
                     'constant_value': str(constant_value) if constant_value is not None else 'None',
-                    'unique_count': int(unique_values),
+                    'unique_count': int(uc),
                     'data_type': str(df[col].dtype)
                 })
-            
             elif pd.api.types.is_numeric_dtype(df[col]):
-                # Check variance for numerical columns
                 variance = df[col].var()
                 if pd.isna(variance) or variance <= self.variance_threshold:
                     constant_value = df[col].iloc[0] if len(df) > 0 else None
                     constant_columns.append({
                         'column': col,
                         'constant_value': str(constant_value) if constant_value is not None else 'None',
-                        'unique_count': int(unique_values),
+                        'unique_count': int(uc),
                         'variance': float(variance) if not pd.isna(variance) else 0.0,
                         'data_type': str(df[col].dtype)
                     })
-        
+
         return {
             'constant_column_count': len(constant_columns),
             'constant_columns': constant_columns
         }
+
     
     def remove_columns(self, df: pd.DataFrame, columns: List[str]) -> tuple:
         """

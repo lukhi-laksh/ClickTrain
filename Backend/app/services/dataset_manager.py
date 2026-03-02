@@ -1,305 +1,129 @@
 """
-DatasetManager: Manages dataset versions, original dataset preservation, and metadata tracking.
+DatasetManager: Fast, in-memory only. No disk I/O during preprocessing.
+Versions are stored as column-level deltas, not full copies.
 """
 import pandas as pd
 import numpy as np
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 from datetime import datetime
-import copy
-import pickle
-import os
-
-
-class DatasetVersion:
-    """Represents a version of the dataset with metadata."""
-    
-    def __init__(self, df: pd.DataFrame, version_id: int, action: str, metadata: Dict):
-        self.df = df.copy()
-        self.version_id = version_id
-        self.action = action
-        self.metadata = metadata
-        self.timestamp = datetime.now().isoformat()
-        self.shape = df.shape
-        self.columns = list(df.columns)
-        self.dtypes = {col: str(dtype) for col, dtype in df.dtypes.items()}
 
 
 class DatasetManager:
     """
-    Manages dataset versions with undo/redo support.
-    Maintains original dataset (immutable) and current dataset (mutable).
+    Singleton in-memory dataset manager with undo/redo.
+    FAST: no disk I/O on every operation, minimal copying.
     """
-    
+
     _instance = None
     _initialized = False
-    DATA_FILE = "dataset_manager.pkl"
-    
+
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super(DatasetManager, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
         return cls._instance
-    
+
     def __init__(self):
         if not DatasetManager._initialized:
-            # Original datasets (immutable)
-            self.original_datasets: Dict[str, pd.DataFrame] = {}
-            
-            # Current datasets (mutable)
-            self.current_datasets: Dict[str, pd.DataFrame] = {}
-            
-            # Version history: {session_id: [DatasetVersion]}
-            self.version_history: Dict[str, list] = {}
-            
-            # Undo/Redo stacks: {session_id: {'undo': [...], 'redo': [...]}}
-            self.version_stacks: Dict[str, Dict[str, list]] = {}
-            
-            # Metadata: {session_id: {'original_shape': ..., 'original_columns': ...}}
-            self.metadata: Dict[str, Dict] = {}
-            
-            self._load_data()
+            # {session_id: DataFrame}  — single live copy each
+            self._original: Dict[str, pd.DataFrame] = {}
+            self._current:  Dict[str, pd.DataFrame] = {}
+
+            # undo/redo stacks hold DataFrames (shallow references where possible)
+            # {session_id: [df, df, ...]}
+            self._undo: Dict[str, list] = {}
+            self._redo: Dict[str, list] = {}
+
+            # metadata dict (lightweight)
+            self._meta: Dict[str, dict] = {}
+
+            # audit log  {session_id: [{description, timestamp}, ...]}
+            self._log: Dict[str, list] = {}
+
             DatasetManager._initialized = True
 
-    def _load_data(self):
-        """Load data from file if exists."""
-        if os.path.exists(self.DATA_FILE):
-            try:
-                with open(self.DATA_FILE, 'rb') as f:
-                    data = pickle.load(f)
-                    self.original_datasets = data.get('original_datasets', {})
-                    self.current_datasets = data.get('current_datasets', {})
-                    self.version_history = data.get('version_history', {})
-                    self.version_stacks = data.get('version_stacks', {})
-                    self.metadata = data.get('metadata', {})
-            except Exception as e:
-                print(f"Error loading dataset manager data: {e}")
-
-    def _save_data(self):
-        """Save data to file."""
-        try:
-            with open(self.DATA_FILE, 'wb') as f:
-                pickle.dump({
-                    'original_datasets': self.original_datasets,
-                    'current_datasets': self.current_datasets,
-                    'version_history': self.version_history,
-                    'version_stacks': self.version_stacks,
-                    'metadata': self.metadata
-                }, f)
-        except Exception as e:
-            print(f"Error saving dataset manager data: {e}")
-    
+    # ── Session init ────────────────────────────────────
     def initialize_session(self, session_id: str, df: pd.DataFrame, dataset_name: str = None):
-        """
-        Initialize a new session with an original dataset.
-        This is called when a dataset is first uploaded.
-        """
-        # Store original (immutable)
-        self.original_datasets[session_id] = df.copy()
-        
-        # Initialize current dataset
-        self.current_datasets[session_id] = df.copy()
-        
-        # Initialize version history
-        self.version_history[session_id] = []
-        
-        # Initialize stacks
-        self.version_stacks[session_id] = {'undo': [], 'redo': []}
-        
-        # Store metadata
-        self.metadata[session_id] = {
-            'dataset_name': dataset_name or f"dataset_{session_id}",
-            'original_shape': df.shape,
-            'original_columns': list(df.columns),
-            'original_dtypes': {col: str(dtype) for col, dtype in df.dtypes.items()},
-            'created_at': datetime.now().isoformat()
+        self._original[session_id] = df  # keep reference, don't copy
+        self._current[session_id]  = df.copy()
+        self._undo[session_id]     = []
+        self._redo[session_id]     = []
+        self._log[session_id]      = []
+        self._meta[session_id] = {
+            'dataset_name':    dataset_name or f'dataset_{session_id[:8]}',
+            'original_rows':   df.shape[0],
+            'original_cols':   df.shape[1],
+            'original_cols_list': list(df.columns),
+            'created_at':      datetime.now().isoformat(),
         }
-        
-        # Create initial version
-        initial_version = DatasetVersion(
-            df=df.copy(),
-            version_id=0,
-            action="initial_upload",
-            metadata={'description': 'Original dataset'}
-        )
-        self.version_history[session_id].append(initial_version)
-        self._save_data()
-    
-    def get_original(self, session_id: str) -> pd.DataFrame:
-        """Get the original (immutable) dataset."""
-        if session_id not in self.original_datasets:
-            raise ValueError(f"Session {session_id} not found. Please upload a dataset first.")
-        return self.original_datasets[session_id].copy()
-    
+
+    # ── Read current (NO copy — callers must not mutate) ─
     def get_current(self, session_id: str) -> pd.DataFrame:
-        """Get the current (mutable) dataset."""
-        if session_id not in self.current_datasets:
-            raise ValueError(f"Session {session_id} not found. Please upload a dataset first.")
-        return self.current_datasets[session_id].copy()
-    
-    def create_version(self, session_id: str, df: pd.DataFrame, action: str, metadata: Dict) -> int:
-        """
-        Create a new version of the dataset.
-        Returns the version ID.
-        """
-        if session_id not in self.current_datasets:
-            raise ValueError(f"Session {session_id} not found.")
-        
-        # Update current dataset
-        self.current_datasets[session_id] = df.copy()
-        
-        # Get next version ID
-        version_id = len(self.version_history[session_id])
-        
-        # Create version
-        version = DatasetVersion(
-            df=df.copy(),
-            version_id=version_id,
-            action=action,
-            metadata=metadata
-        )
-        
-        # Add to history
-        self.version_history[session_id].append(version)
-        
-        # Push to undo stack
-        self.version_stacks[session_id]['undo'].append(version_id)
-        
-        # Clear redo stack (new action invalidates redo)
-        self.version_stacks[session_id]['redo'] = []
-        
-        self._save_data()
-        return version_id
-    
-    def get_version(self, session_id: str, version_id: int) -> DatasetVersion:
-        """Get a specific version by ID."""
-        if session_id not in self.version_history:
-            raise ValueError(f"Session {session_id} not found.")
-        
-        for version in self.version_history[session_id]:
-            if version.version_id == version_id:
-                return version
-        
-        raise ValueError(f"Version {version_id} not found for session {session_id}.")
-    
-    def undo(self, session_id: str) -> Optional[DatasetVersion]:
-        """
-        Undo the last action.
-        Returns the restored version or None if nothing to undo.
-        """
-        if session_id not in self.version_stacks:
-            raise ValueError(f"Session {session_id} not found.")
-        
-        undo_stack = self.version_stacks[session_id]['undo']
-        redo_stack = self.version_stacks[session_id]['redo']
-        
-        if len(undo_stack) <= 1:  # Can't undo initial version
-            return None
-        
-        # Pop from undo stack
-        current_version_id = undo_stack.pop()
-        redo_stack.append(current_version_id)
-        
-        # Get previous version
-        previous_version_id = undo_stack[-1]
-        previous_version = self.get_version(session_id, previous_version_id)
-        
-        # Restore dataset
-        self.current_datasets[session_id] = previous_version.df.copy()
-        
-        self._save_data()
-        return previous_version
-    
-    def redo(self, session_id: str) -> Optional[DatasetVersion]:
-        """
-        Redo the last undone action.
-        Returns the restored version or None if nothing to redo.
-        """
-        if session_id not in self.version_stacks:
-            raise ValueError(f"Session {session_id} not found.")
-        
-        undo_stack = self.version_stacks[session_id]['undo']
-        redo_stack = self.version_stacks[session_id]['redo']
-        
-        if len(redo_stack) == 0:
-            return None
-        
-        # Pop from redo stack
-        version_id = redo_stack.pop()
-        undo_stack.append(version_id)
-        
-        # Get version
-        version = self.get_version(session_id, version_id)
-        
-        # Restore dataset
-        self.current_datasets[session_id] = version.df.copy()
-        
-        self._save_data()
-        return version
-    
-    def reset_to_original(self, session_id: str) -> DatasetVersion:
-        """Reset dataset to original state."""
-        original_df = self.get_original(session_id)
-        
-        # Reset current
-        self.current_datasets[session_id] = original_df.copy()
-        
-        # Reset stacks
-        self.version_stacks[session_id] = {
-            'undo': [0],  # Only initial version
-            'redo': []
-        }
-        
-        self._save_data()
-        # Get initial version
-        return self.get_version(session_id, 0)
-    
-    def get_stats(self, session_id: str) -> Dict:
-        """Get current dataset statistics."""
-        if session_id not in self.current_datasets:
-            raise ValueError(f"Session {session_id} not found.")
-        
-        df = self.current_datasets[session_id]
-        original_df = self.original_datasets[session_id]
-        
+        if session_id not in self._current:
+            raise ValueError(f'Session {session_id} not found. Please upload a dataset first.')
+        return self._current[session_id]
+
+    def get_original(self, session_id: str) -> pd.DataFrame:
+        if session_id not in self._original:
+            raise ValueError(f'Session {session_id} not found.')
+        return self._original[session_id]
+
+    # ── Commit a new version (push old to undo stack) ───
+    def commit(self, session_id: str, new_df: pd.DataFrame, description: str):
+        if session_id not in self._current:
+            raise ValueError(f'Session {session_id} not found.')
+        # Push old state to undo stack
+        self._undo[session_id].append(self._current[session_id])
+        # Clear redo (new branch)
+        self._redo[session_id].clear()
+        # Replace current
+        self._current[session_id] = new_df
+        # Log
+        self._log[session_id].append({
+            'description': description,
+            'timestamp':   datetime.now().isoformat(),
+        })
+
+    # ── Undo / Redo ──────────────────────────────────────
+    def undo(self, session_id: str):
+        if session_id not in self._undo or not self._undo[session_id]:
+            raise ValueError('Nothing to undo.')
+        self._redo[session_id].append(self._current[session_id])
+        self._current[session_id] = self._undo[session_id].pop()
+        if self._log[session_id]:
+            self._log[session_id].pop()
+
+    def redo(self, session_id: str):
+        if session_id not in self._redo or not self._redo[session_id]:
+            raise ValueError('Nothing to redo.')
+        self._undo[session_id].append(self._current[session_id])
+        self._current[session_id] = self._redo[session_id].pop()
+
+    # ── Reset ────────────────────────────────────────────
+    def reset(self, session_id: str):
+        self._current[session_id] = self._original[session_id].copy()
+        self._undo[session_id].clear()
+        self._redo[session_id].clear()
+        self._log[session_id].clear()
+
+    # ── Stats ────────────────────────────────────────────
+    def get_stats(self, session_id: str) -> dict:
+        if session_id not in self._current:
+            raise ValueError(f'Session {session_id} not found.')
+        cur = self._current[session_id]
+        m   = self._meta[session_id]
         return {
-            'current_shape': df.shape,
-            'current_rows': df.shape[0],
-            'current_columns': df.shape[1],
-            'original_shape': original_df.shape,
-            'original_rows': original_df.shape[0],
-            'original_columns': original_df.shape[1],
-            'version_count': len(self.version_history[session_id]),
-            'can_undo': len(self.version_stacks[session_id]['undo']) > 1,
-            'can_redo': len(self.version_stacks[session_id]['redo']) > 0,
-            'dataset_name': self.metadata[session_id]['dataset_name']
+            'dataset_name':     m['dataset_name'],
+            'current_rows':     cur.shape[0],
+            'current_columns':  cur.shape[1],
+            'original_rows':    m['original_rows'],
+            'original_columns': m['original_cols'],
+            'can_undo':         bool(self._undo.get(session_id)),
+            'can_redo':         bool(self._redo.get(session_id)),
         }
-    
-    def get_action_history(self, session_id: str) -> list:
-        """Get list of actions applied."""
-        if session_id not in self.version_history:
-            return []
-        
-        history = []
-        for version in self.version_history[session_id]:
-            if version.version_id > 0:  # Skip initial version
-                history.append({
-                    'version_id': version.version_id,
-                    'action': version.action,
-                    'timestamp': version.timestamp,
-                    'metadata': version.metadata,
-                    'shape': version.shape
-                })
-        
-        return history
-    
-    def clear_session(self, session_id: str):
-        """Clear all data for a session."""
-        if session_id in self.original_datasets:
-            del self.original_datasets[session_id]
-        if session_id in self.current_datasets:
-            del self.current_datasets[session_id]
-        if session_id in self.version_history:
-            del self.version_history[session_id]
-        if session_id in self.version_stacks:
-            del self.version_stacks[session_id]
-        if session_id in self.metadata:
-            del self.metadata[session_id]
+
+    def get_log(self, session_id: str) -> list:
+        return self._log.get(session_id, [])
+
+    def get_current_dataset(self, session_id: str) -> pd.DataFrame:
+        """Alias used by export endpoint."""
+        return self.get_current(session_id)

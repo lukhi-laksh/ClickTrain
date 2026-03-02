@@ -16,49 +16,37 @@ class DuplicateHandler:
     
     def detect_duplicates(self, df: pd.DataFrame) -> Dict:
         """
-        Detect duplicate rows and columns.
-        Returns comprehensive duplicate statistics.
+        Detect duplicate rows. Fast path: uses pandas vectorized .duplicated().
         """
-        # Duplicate rows
-        duplicate_rows = df.duplicated(keep=False)
-        duplicate_row_indices = df[duplicate_rows].index.tolist()
-        duplicate_row_count = duplicate_rows.sum()
-        
-        # Unique duplicate groups
-        duplicate_groups = df[duplicate_rows].groupby(list(df.columns)).groups
-        unique_duplicate_count = len(duplicate_groups)
-        
-        # Duplicate columns
-        duplicate_columns = []
-        columns = df.columns.tolist()
-        
-        for i, col1 in enumerate(columns):
-            for col2 in columns[i+1:]:
-                if df[col1].equals(df[col2]):
-                    duplicate_columns.append({
-                        'column1': col1,
-                        'column2': col2,
-                        'identical': True
-                    })
-        
-        # Preview of duplicate rows (first 10)
+        total_rows = len(df)
+        # Boolean mask of ALL duplicate rows (including originals)
+        dup_mask = df.duplicated(keep=False)
+        duplicate_row_count = int(dup_mask.sum())
+
+        # Number of unique duplicate groups = total duplicated rows - rows that would be kept
+        # i.e. dup_mask.sum() - duplicated(keep='first').sum()
+        unique_duplicate_count = int(duplicate_row_count - df.duplicated(keep='first').sum()) if duplicate_row_count else 0
+
+        # Preview: first 10 duplicated rows only (no full groupby)
         duplicate_preview = None
         if duplicate_row_count > 0:
-            duplicate_preview_df = df[duplicate_rows].head(10)
+            preview_df = df[dup_mask].head(10)
             duplicate_preview = {
-                'columns': duplicate_preview_df.columns.tolist(),
-                'rows': duplicate_preview_df.values.tolist(),
-                'indices': duplicate_preview_df.index.tolist()
+                'columns': preview_df.columns.tolist(),
+                'rows':    preview_df.values.tolist(),
+                'indices': preview_df.index.tolist()
             }
-        
+
         return {
-            'duplicate_row_count': int(duplicate_row_count),
-            'unique_duplicate_groups': int(unique_duplicate_count),
-            'duplicate_row_indices': duplicate_row_indices[:100],  # Limit to 100
-            'duplicate_column_count': len(duplicate_columns),
-            'duplicate_columns': duplicate_columns,
+            'duplicate_row_count':   duplicate_row_count,
+            'unique_duplicate_groups': unique_duplicate_count,
+            'duplicate_row_indices': df[dup_mask].index.tolist()[:100],
+            'duplicate_column_count': 0,   # not computed (unused by frontend)
+            'duplicate_columns': [],
+            'total_rows': total_rows,
             'preview': duplicate_preview
         }
+
     
     def remove_duplicates(
         self,

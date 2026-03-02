@@ -29,55 +29,62 @@ class NullValueHandler:
         """
         Detect null values across the dataset.
         Returns comprehensive null statistics.
+        FAST PATH: no full DataFrame copy — uses vectorized replace in-place on a
+        column-by-column basis, skipping numeric columns that can't hold string nulls.
         """
-        # Convert various null representations to NaN
-        df_normalized = self._normalize_nulls(df.copy())
-        
-        # Calculate statistics
-        total_cells = df_normalized.size
-        total_nulls = df_normalized.isna().sum().sum()
+        # Build the normalized null mask without copying the whole dataframe.
+        # For numeric cols, pandas isnull already covers NaN/None/pd.NA.
+        # For object cols, we also need to catch string-null representations.
+        str_nulls = self._str_null_set()
+        null_mask = pd.DataFrame(False, index=df.index, columns=df.columns)
+        for col in df.columns:
+            if df[col].dtype == object:
+                null_mask[col] = df[col].isin(str_nulls) | df[col].isna()
+            else:
+                null_mask[col] = df[col].isna()
+
+        # Aggregate statistics from the mask (no copy of data values needed)
+        col_null_counts = null_mask.sum()
+        total_nulls = int(col_null_counts.sum())
+        total_cells = df.size
         null_percentage = (total_nulls / total_cells * 100) if total_cells > 0 else 0
-        
-        # Per-column statistics
+        n = len(df)
+
         column_stats = []
-        for col in df_normalized.columns:
-            null_count = df_normalized[col].isna().sum()
-            null_pct = (null_count / len(df_normalized) * 100) if len(df_normalized) > 0 else 0
-            
+        for col in df.columns:
+            null_count = int(col_null_counts[col])
+            null_pct = (null_count / n * 100) if n > 0 else 0
             column_stats.append({
                 'column': col,
-                'data_type': str(df_normalized[col].dtype),
-                'null_count': int(null_count),
+                'data_type': str(df[col].dtype),
+                'null_count': null_count,
                 'null_percentage': round(null_pct, 2),
-                'non_null_count': int(len(df_normalized) - null_count)
+                'non_null_count': n - null_count
             })
-        
-        # Sort by null percentage descending
+
         column_stats.sort(key=lambda x: x['null_percentage'], reverse=True)
-        
         return {
-            'total_null_count': int(total_nulls),
+            'total_null_count': total_nulls,
             'total_null_percentage': round(null_percentage, 2),
-            'total_cells': int(total_cells),
+            'total_cells': total_cells,
             'columns': column_stats
         }
     
+    def _str_null_set(self):
+        """Return a frozenset of string representations that mean 'null'."""
+        str_nulls = [v for v in self.NULL_VALUES if isinstance(v, str)]
+        stripped = {v.strip() for v in str_nulls}
+        return frozenset(str_nulls) | stripped
+
     def _normalize_nulls(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Convert various null representations to pandas NaN."""
-        df_normalized = df.copy()
-        
-        # Replace string representations of null
-        for null_val in self.NULL_VALUES:
-            if isinstance(null_val, str):
-                # Replace exact matches
-                df_normalized = df_normalized.replace(null_val, np.nan)
-                # Replace after stripping whitespace
-                for col in df_normalized.select_dtypes(include=['object']).columns:
-                    df_normalized[col] = df_normalized[col].apply(
-                        lambda x: np.nan if isinstance(x, str) and x.strip() == null_val.strip() else x
-                    )
-        
-        return df_normalized
+        """Convert various null representations to pandas NaN. Fully vectorized.
+        Only operates on object-dtype columns to avoid touching numeric cols."""
+        all_str_nulls = list(self._str_null_set())
+        # Only replace on object columns — numeric cols cannot hold string nulls
+        obj_cols = df.select_dtypes(include='object').columns
+        if len(obj_cols):
+            df[obj_cols] = df[obj_cols].replace(all_str_nulls, np.nan)
+        return df
     
     def handle_missing_values(
         self,
@@ -100,7 +107,7 @@ class NullValueHandler:
         Returns:
             Tuple of (processed_df, metadata)
         """
-        df_processed = self._normalize_nulls(df.copy())
+        df_processed = self._normalize_nulls(df.copy())  # copy needed here — we mutate values
         
         if columns is None:
             columns = list(df_processed.columns)

@@ -380,3 +380,27 @@ async def get_scalers(session_id: str):
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get scalers: {str(e)}")
+
+# ==================== CSV Export ====================
+
+from fastapi.responses import StreamingResponse
+import io
+
+@router.get("/preprocessing/{session_id}/export-csv")
+async def export_dataset_csv(session_id: str):
+    """Export the current processed dataset as a downloadable CSV file."""
+    try:
+        df = preprocessing_engine.get_current_dataset(session_id)
+        buffer = io.StringIO()
+        df.to_csv(buffer, index=False)
+        buffer.seek(0)
+        return StreamingResponse(
+            iter([buffer.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=preprocessed_{session_id[:8]}.csv"}
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to export dataset: {str(e)}")
+

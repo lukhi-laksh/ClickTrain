@@ -1,39 +1,165 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Upload Dataset - ClickTrain</title>
+  <!-- Tailwind is required for header.js (which uses Tailwind classes) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    .hover-lift:hover { transform: translateY(-2px); }
-    .animate-fade-in { animation: fadeIn 0.6s ease-in-out; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    /* Page-specific styles only — header relies on Tailwind from above */
+    .hover-lift {
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .hover-lift:hover {
+      transform: translateY(-2px);
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .animate-fade-in {
+      animation: fadeIn 0.5s ease-in-out;
+    }
+
+    /* ── Drop zone ── */
+    #dropZone {
+      border: 2.5px dashed #d1d5db;
+      transition: border-color .2s, background .2s, box-shadow .2s;
+    }
+
+    #dropZone:hover,
+    #dropZone.drag-over {
+      border-color: #6366f1 !important;
+      background: #eef2ff !important;
+      box-shadow: 0 4px 24px rgba(99, 102, 241, .15);
+    }
+
+    /* ── Upload progress bar ── */
+    #uploadProgress {
+      display: none;
+    }
+
+    .prog-bar-track {
+      background: #e5e7eb;
+      border-radius: 999px;
+      height: 8px;
+      overflow: hidden;
+    }
+
+    .prog-bar-fill {
+      background: linear-gradient(90deg, #6366f1, #8b5cf6);
+      height: 100%;
+      border-radius: 999px;
+      width: 0%;
+      transition: width .3s ease;
+    }
+
+    /* ── Preview table ── */
+    #previewTable thead tr {
+      background: #f3f4f6;
+    }
+
+    #previewTable th {
+      border: 1px solid #e5e7eb;
+      padding: 8px 12px;
+      text-align: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: #374151;
+      background: #f3f4f6;
+      white-space: nowrap;
+      max-width: 160px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #previewTable td {
+      border: 1px solid #e5e7eb;
+      padding: 7px 12px;
+      text-align: center;
+      font-size: 11px;
+      color: #374151;
+      max-width: 180px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    #previewTable tbody tr:nth-child(even) {
+      background: #f9fafb;
+    }
+
+    #previewTable tbody tr:hover {
+      background: #eef2ff;
+      transition: background .1s;
+    }
+
+    /* ── Error box ── */
+    #errorBox {
+      display: none;
+      margin-top: 16px;
+      padding: 14px 18px;
+      background: #fff1f2;
+      border: 1px solid #fca5a5;
+      border-radius: 10px;
+      font-size: .875rem;
+      color: #991b1b;
+      font-weight: 600;
+    }
   </style>
 </head>
+
 <body class="bg-white text-gray-900">
   <div id="ml-header"></div>
 
   <!-- Main Content -->
   <main class="min-h-screen py-16">
-    <div class="max-w-4xl mx-auto px-8">
+    <div class="max-w-4xl mx-auto px-8 animate-fade-in">
       <div class="text-center mb-12">
         <h1 class="text-4xl font-bold mb-4">Upload Your Dataset</h1>
         <p class="text-xl text-gray-600">Start your ML journey by uploading a CSV file</p>
       </div>
 
       <!-- Upload Area -->
-      <div id="dropZone" class="bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl p-12 text-center hover-lift transition-all duration-300 hover:border-indigo-400">
+      <div id="dropZone" class="bg-gray-50 rounded-2xl p-12 text-center hover-lift cursor-pointer"
+        onclick="document.getElementById('fileInput').click()">
         <div class="text-6xl mb-6">📁</div>
-        <h3 class="text-2xl font-semibold mb-4">Drag & Drop Your CSV File</h3>
+        <h3 class="text-2xl font-semibold mb-4">Drag &amp; Drop Your CSV File</h3>
         <p class="text-gray-500 mb-8">Or click to browse files (max 50MB)</p>
         <input type="file" id="fileInput" accept=".csv" class="hidden">
-        <button onclick="document.getElementById('fileInput').click()" class="px-8 py-4 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl">
+        <button onclick="event.stopPropagation(); document.getElementById('fileInput').click()"
+          class="px-8 py-4 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl font-semibold">
           Choose File
         </button>
       </div>
 
-      <!-- File Info -->
+      <!-- Upload Progress Bar -->
+      <div id="uploadProgress" class="mt-6 bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
+        <div class="flex justify-between text-sm font-semibold text-gray-700 mb-3">
+          <span id="progLabel">Uploading...</span>
+          <span id="progPct">0%</span>
+        </div>
+        <div class="prog-bar-track">
+          <div class="prog-bar-fill" id="progFill"></div>
+        </div>
+      </div>
+
+      <!-- Error Box -->
+      <div id="errorBox"></div>
+
+      <!-- File Info Cards -->
       <div id="fileInfo" class="mt-8 hidden">
         <div class="mb-4 text-center">
           <h4 id="fileInfoTitle" class="text-xl font-semibold text-gray-900">
@@ -41,20 +167,23 @@
           </h4>
         </div>
         <div class="grid gap-4 md:grid-cols-3">
-          <!-- Card 1: Rows -->
-          <div class="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm flex flex-col justify-center items-center text-center">
+          <!-- Rows -->
+          <div
+            class="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm flex flex-col justify-center items-center text-center">
             <p class="text-xs uppercase tracking-wide text-gray-500 mb-1">Rows</p>
             <p id="rowCount" class="text-3xl font-bold text-indigo-600"></p>
             <p class="text-xs text-gray-500 mt-1">number of rows</p>
           </div>
-          <!-- Card 2: Columns -->
-          <div class="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm flex flex-col justify-center items-center text-center">
+          <!-- Columns -->
+          <div
+            class="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm flex flex-col justify-center items-center text-center">
             <p class="text-xs uppercase tracking-wide text-gray-500 mb-1">Columns</p>
             <p id="colCount" class="text-3xl font-bold text-indigo-600"></p>
             <p class="text-xs text-gray-500 mt-1">total features</p>
           </div>
-          <!-- Card 3: File Size -->
-          <div class="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm flex flex-col justify-center items-center text-center">
+          <!-- File Size -->
+          <div
+            class="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm flex flex-col justify-center items-center text-center">
             <p class="text-xs uppercase tracking-wide text-gray-500 mb-1">File Size</p>
             <p id="fileSize" class="text-xl font-semibold text-gray-900"></p>
             <p class="text-xs text-gray-500 mt-1">file size (MB)</p>
@@ -70,15 +199,11 @@
             <p class="text-xs text-gray-500 mt-1 text-center">Showing first 5 rows (df.head())</p>
           </div>
           <div class="overflow-x-auto rounded-xl border border-gray-200 bg-gray-50">
-            <table id="previewTable" class="min-w-max text-xs border-collapse">
+            <table id="previewTable" class="min-w-max border-collapse">
               <thead>
-                <tr id="previewHeaderRow" class="bg-gray-100">
-                  <!-- Header cells will be populated dynamically -->
-                </tr>
+                <tr id="previewHeaderRow"></tr>
               </thead>
-              <tbody id="tableBody" class="bg-white">
-                <!-- Table rows will be populated by JavaScript -->
-              </tbody>
+              <tbody id="tableBody" class="bg-white"></tbody>
             </table>
           </div>
         </div>
@@ -86,51 +211,33 @@
 
       <!-- Next Step -->
       <div id="nextStep" class="mt-12 text-center hidden">
-        <a href="Analysis.html" class="inline-block px-8 py-4 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl">
+        <a id="nextLink" href="Analysis.html"
+          class="inline-block px-8 py-4 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl font-semibold text-base">
           Proceed to Analysis →
         </a>
       </div>
     </div>
   </main>
 
-  <!-- Scripts -->
   <script>
-    const fileInput = document.getElementById('fileInput');
+    const API = 'http://127.0.0.1:8000/api';
+
+    // ── Drag & drop ──────────────────────────────
     const dropZone = document.getElementById('dropZone');
-    const fileInfo = document.getElementById('fileInfo');
-    const dataPreview = document.getElementById('dataPreview');
-    const nextStep = document.getElementById('nextStep');
+    const fileInput = document.getElementById('fileInput');
 
-    fileInput.addEventListener('change', (event) => {
-      const file = event.target.files[0];
-      if (file) {
-        processFile(file);
-      }
-    });
+    ['dragenter', 'dragover'].forEach(ev => dropZone.addEventListener(ev, e => {
+      e.preventDefault(); e.stopPropagation();
+      dropZone.classList.add('drag-over');
+    }));
+    ['dragleave', 'drop'].forEach(ev => dropZone.addEventListener(ev, e => {
+      e.preventDefault(); e.stopPropagation();
+      dropZone.classList.remove('drag-over');
+      if (ev === 'drop' && e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
+    }));
+    fileInput.addEventListener('change', e => { if (e.target.files[0]) processFile(e.target.files[0]); });
 
-    // Drag & drop support
-    ['dragenter', 'dragover'].forEach(eventName => {
-      dropZone.addEventListener(eventName, (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dropZone.classList.add('border-indigo-500', 'bg-indigo-50');
-      });
-    });
-
-    ['dragleave', 'drop'].forEach(eventName => {
-      dropZone.addEventListener(eventName, (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (eventName === 'drop') {
-          const file = e.dataTransfer.files[0];
-          if (file) {
-            processFile(file);
-          }
-        }
-        dropZone.classList.remove('border-indigo-500', 'bg-indigo-50');
-      });
-    });
-
+    // ── Render UI from state ──────────────────────
     function renderUploadState(state, sessionId) {
       const fileInfoTitleEl = document.getElementById('fileInfoTitle');
       const fileSizeEl = document.getElementById('fileSize');
@@ -151,161 +258,162 @@
       const preview = Array.isArray(state.preview) ? state.preview : [];
 
       if (columns.length === 0) {
-        // No structural information at all, show generic message
-        const emptyCell = document.createElement('td');
-        emptyCell.colSpan = 1;
-        emptyCell.className = 'px-4 py-4 text-center text-gray-500';
-        emptyCell.textContent = 'Dataset loaded, but no preview is available.';
         const row = document.createElement('tr');
-        row.appendChild(emptyCell);
-        tableBody.appendChild(row);
+        const td = document.createElement('td');
+        td.colSpan = 1;
+        td.className = 'px-4 py-4 text-center text-gray-500';
+        td.textContent = 'Dataset loaded, but no preview is available.';
+        row.appendChild(td); tableBody.appendChild(row);
       } else {
-        // Header cells
+        // Build header using DocumentFragment
+        const hFrag = document.createDocumentFragment();
         columns.forEach(col => {
-          const th = document.createElement('th');
-          th.className = 'border border-gray-200 px-3 py-2 text-center text-[11px] font-semibold text-gray-700 bg-gray-100 whitespace-normal break-words max-w-[160px]';
-          th.textContent = col;
-          th.title = col;
-          headerRow.appendChild(th);
+          const th = document.createElement('th'); th.textContent = col; th.title = col;
+          hFrag.appendChild(th);
         });
+        headerRow.appendChild(hFrag);
 
-        // Data rows (df.head()) from backend
+        // Build rows
+        const bFrag = document.createDocumentFragment();
         if (preview.length === 0) {
-          // Fallback row if somehow preview is empty
           const row = document.createElement('tr');
-          row.className = 'even:bg-gray-50';
           columns.forEach(() => {
-            const td = document.createElement('td');
-            td.className = 'border border-gray-200 px-3 py-2 text-center text-[11px] text-gray-500';
-            td.textContent = '—';
-            row.appendChild(td);
+            const td = document.createElement('td'); td.textContent = '—'; row.appendChild(td);
           });
-          tableBody.appendChild(row);
+          bFrag.appendChild(row);
         } else {
-          console.log('Rendering preview. Columns:', columns);
-          console.log('First preview row from backend:', preview[0]);
-
           preview.forEach((rowObj, rowIndex) => {
             const row = document.createElement('tr');
-            row.className = 'even:bg-gray-50 hover:bg-indigo-50 transition-colors';
-
             columns.forEach((col, colIndex) => {
               const td = document.createElement('td');
-              td.className = 'border border-gray-200 px-3 py-2 text-center text-[11px] text-gray-800 align-middle whitespace-normal break-words max-w-[180px]';
-
               let value;
-              // Most common case: preview is array of objects keyed by column name (from pandas to_dict)
               if (rowObj && typeof rowObj === 'object' && !Array.isArray(rowObj)) {
                 value = rowObj[col];
               } else if (Array.isArray(rowObj)) {
-                // Fallback: preview is array of arrays, use column index
                 value = rowObj[colIndex];
               } else {
-                // Very defensive: row is a primitive, just show it
                 value = rowObj;
               }
-
-              const displayValue = value === null || value === undefined ? '' : String(value);
-              td.textContent = displayValue;
-              td.title = displayValue;
+              const displayValue = (value === null || value === undefined) ? '' : String(value);
+              td.textContent = displayValue; td.title = displayValue;
               row.appendChild(td);
             });
-
-            tableBody.appendChild(row);
+            bFrag.appendChild(row);
           });
         }
+        tableBody.appendChild(bFrag);
       }
 
-      fileInfo.classList.remove('hidden');
-      dataPreview.classList.remove('hidden');
-      nextStep.classList.remove('hidden');
-
-      // Ensure Analysis link has current session id
-      const nextLink = document.querySelector('#nextStep a');
-      nextLink.href = `Analysis.html?session_id=${sessionId}`;
+      document.getElementById('fileInfo').classList.remove('hidden');
+      document.getElementById('dataPreview').classList.remove('hidden');
+      document.getElementById('nextStep').classList.remove('hidden');
+      document.getElementById('nextLink').href = `Analysis.html?session_id=${sessionId}`;
     }
 
+    // ── Upload with XHR (real progress bar) ──────
     function processFile(file) {
-      console.log('File selected:', file.name, file.size);
+      // Reset previous state
+      document.getElementById('errorBox').style.display = 'none';
+      document.getElementById('fileInfo').classList.add('hidden');
+      document.getElementById('dataPreview').classList.add('hidden');
+      document.getElementById('nextStep').classList.add('hidden');
 
-      // Show loading state
+      // Show loading state immediately
       const fileInfoTitleEl = document.getElementById('fileInfoTitle');
-      const fileSizeEl = document.getElementById('fileSize');
-      const rowCountEl = document.getElementById('rowCount');
-      const colCountEl = document.getElementById('colCount');
-
       fileInfoTitleEl.innerHTML = 'Information about <span class="font-bold">uploading file...</span>';
-      fileSizeEl.textContent = '';
-      rowCountEl.textContent = '';
-      colCountEl.textContent = '';
-      fileInfo.classList.remove('hidden');
+      document.getElementById('fileSize').textContent = '';
+      document.getElementById('rowCount').textContent = '';
+      document.getElementById('colCount').textContent = '';
+      document.getElementById('fileInfo').classList.remove('hidden');
 
-      // Create FormData
+      // Progress bar
+      const progress = document.getElementById('uploadProgress');
+      const progFill = document.getElementById('progFill');
+      const progLabel = document.getElementById('progLabel');
+      const progPct = document.getElementById('progPct');
+      progress.style.display = '';
+      progFill.style.width = '2%';
+      progLabel.textContent = 'Uploading ' + file.name + '…';
+      progPct.textContent = '0%';
+
       const formData = new FormData();
       formData.append('file', file);
 
-      console.log('Sending request to backend...');
+      const xhr = new XMLHttpRequest();
 
-      // Upload to backend
-      fetch('http://127.0.0.1:8000/api/upload', {
-        method: 'POST',
-        body: formData
-      })
-      .then(response => {
-        console.log('Response received:', response.status);
-        return response.json();
-      })
-      .then(data => {
-        console.log('Data received:', data);
-        if (data.session_id) {
-          // Store session ID
-          localStorage.setItem('session_id', data.session_id);
-          console.log('Session ID stored:', data.session_id);
-
-          // Build state from backend (pandas) response
-          const state = {
-            fileName: file.name,
-            fileSizeMB: (file.size / 1024 / 1024).toFixed(2),
-            rowCount: Array.isArray(data.shape) ? data.shape[0] : data.shape?.[0],
-            colCount: Array.isArray(data.shape) ? data.shape[1] : data.shape?.[1],
-            columns: data.columns || [],
-            preview: Array.isArray(data.preview) ? data.preview : []
-          };
-
-          // Persist full upload state so it survives navigation
-          localStorage.setItem('upload_state', JSON.stringify(state));
-
-          // Render UI from state
-          renderUploadState(state, data.session_id);
-
-          console.log('Upload successful, UI updated');
-
-        } else {
-          console.error('Upload failed:', data);
-          alert('Upload failed: ' + (data.detail || 'Unknown error'));
-        }
-      })
-      .catch(error => {
-        console.error('Upload error:', error);
-        alert('Upload failed. Please check if the backend server is running.');
+      xhr.upload.addEventListener('progress', e => {
+        if (!e.lengthComputable) return;
+        const pct = Math.round(e.loaded / e.total * 85); // cap at 85% — rest is server
+        progFill.style.width = pct + '%';
+        progPct.textContent = pct + '%';
       });
+
+      xhr.addEventListener('load', () => {
+        progFill.style.width = '100%';
+        progPct.textContent = '100%';
+        progLabel.textContent = 'Processing…';
+
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (xhr.status >= 200 && xhr.status < 300 && data.session_id) {
+            localStorage.setItem('session_id', data.session_id);
+            console.log('Session ID stored:', data.session_id);
+
+            const state = {
+              fileName: file.name,
+              fileSizeMB: (file.size / 1024 / 1024).toFixed(2),
+              rowCount: Array.isArray(data.shape) ? data.shape[0] : data.shape?.[0],
+              colCount: Array.isArray(data.shape) ? data.shape[1] : data.shape?.[1],
+              columns: data.columns || [],
+              preview: Array.isArray(data.preview) ? data.preview : []
+            };
+            localStorage.setItem('upload_state', JSON.stringify(state));
+
+            setTimeout(() => {
+              progress.style.display = 'none';
+              renderUploadState(state, data.session_id);
+            }, 300);
+          } else {
+            showError('Upload failed: ' + (data.detail || 'Unknown error'));
+            progress.style.display = 'none';
+            document.getElementById('fileInfo').classList.add('hidden');
+          }
+        } catch (e) {
+          showError('Upload failed: could not parse server response.');
+          progress.style.display = 'none';
+          document.getElementById('fileInfo').classList.add('hidden');
+        }
+      });
+
+      xhr.addEventListener('error', () => {
+        showError('Upload failed. Please check if the backend server is running on port 8000.');
+        progress.style.display = 'none';
+        document.getElementById('fileInfo').classList.add('hidden');
+      });
+
+      xhr.open('POST', API + '/upload');
+      xhr.send(formData);
     }
 
-    // Restore previous upload state (from backend data) if available
+    function showError(msg) {
+      const box = document.getElementById('errorBox');
+      box.textContent = msg; box.style.display = '';
+    }
+
+    // ── Restore previous session ──────────────────
     (function restorePreviousUpload() {
       const storedState = localStorage.getItem('upload_state');
       const sessionId = localStorage.getItem('session_id');
       if (!storedState || !sessionId) return;
       try {
         const state = JSON.parse(storedState);
-        if (!state || !state.fileName) return;
-        renderUploadState(state, sessionId);
-        console.log('Restored upload state from previous session');
-      } catch (e) {
-        console.error('Failed to restore upload state:', e);
-      }
+        if (state && state.fileName) renderUploadState(state, sessionId);
+      } catch (e) { /* ignore */ }
     })();
   </script>
+
+  <!-- header.js must come AFTER script tag, uses Tailwind classes -->
   <script src="header.js"></script>
 </body>
+
 </html>

@@ -48,9 +48,10 @@ class DataService:
             print(f"Error saving data: {e}")
 
     def store_data(self, session_id: str, df: pd.DataFrame):
-        """Store the uploaded dataset"""
+        """Store the uploaded dataset — in-memory only, no disk write."""
         self.data_store[session_id] = df.copy()
-        self._save_data()
+        # NOTE: _save_data() intentionally NOT called here — it was the #1 bottleneck.
+        # Data lives in-memory for the server lifetime; disk persistence is not needed.
 
     def get_data(self, session_id: str) -> pd.DataFrame:
         """Retrieve the dataset for a session"""
@@ -59,9 +60,9 @@ class DataService:
         return self.data_store[session_id]
 
     def store_processed_data(self, session_id: str, processed_data: Dict):
-        """Store preprocessed data splits"""
+        """Store preprocessed data splits — in-memory only."""
         self.processed_data_store[session_id] = processed_data
-        self._save_data()
+        # NOTE: _save_data() intentionally NOT called here.
 
     def get_processed_data(self, session_id: str) -> Dict:
         """Retrieve preprocessed data splits"""

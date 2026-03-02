@@ -1,1696 +1,1163 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Data Preprocessing - ClickTrain</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Preprocessing - ClickTrain</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
-    .hover-lift:hover { transform: translateY(-2px); }
-    .animate-fade-in { animation: fadeIn 0.6s ease-in-out; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-    
-    /* Sidebar styling */
-    .sidebar-item {
-      transition: all 0.2s ease;
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
     }
-    .sidebar-item.active {
-      background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
-      color: white;
-      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+      font-size: 14px
     }
-    .sidebar-item:hover:not(.active) {
-      background-color: #f3f4f6;
-    }
-    
-    /* Tooltip styling */
-    .info-tooltip {
-      position: relative;
-      display: inline-block;
-    }
-    .info-tooltip .tooltip-content {
-      visibility: hidden;
-      opacity: 0;
-      position: absolute;
-      z-index: 1000;
-      background-color: #1f2937;
-      color: white;
-      padding: 12px 16px;
-      border-radius: 8px;
+
+    /* Nav */
+    .nav-btn {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      width: 100%;
+      padding: 9px 12px;
+      border: none;
+      background: none;
+      cursor: pointer;
       font-size: 13px;
-      line-height: 1.6;
-      width: 320px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      transition: opacity 0.3s, visibility 0.3s;
-      bottom: 125%;
-      left: 50%;
-      transform: translateX(-50%);
-      pointer-events: none;
+      font-weight: 500;
+      color: #64748b;
+      border-radius: 8px;
+      text-align: left;
+      transition: background .1s, color .1s
     }
-    .info-tooltip .tooltip-content::after {
-      content: "";
-      position: absolute;
-      top: 100%;
-      left: 50%;
-      transform: translateX(-50%);
-      border: 6px solid transparent;
-      border-top-color: #1f2937;
+
+    .nav-btn:hover {
+      background: #f1f5f9;
+      color: #1e293b
     }
-    .info-tooltip:hover .tooltip-content,
-    .info-tooltip:focus .tooltip-content {
-      visibility: visible;
-      opacity: 1;
+
+    .nav-btn.active {
+      background: #6366f1;
+      color: #fff;
+      font-weight: 600
     }
-    
-    /* Modal styling */
-    .modal-overlay {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
-      z-index: 1000;
+
+    .nav-num {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      font-size: 10px;
+      font-weight: 700;
+      display: flex;
       align-items: center;
       justify-content: center;
+      flex-shrink: 0;
+      background: #e2e8f0;
+      color: #64748b;
+      transition: .15s
     }
-    .modal-overlay.active {
-      display: flex;
+
+    .nav-btn.active .nav-num {
+      background: rgba(255, 255, 255, .25);
+      color: #fff
     }
-    .modal-content {
-      background: white;
-      border-radius: 12px;
-      padding: 24px;
-      max-width: 600px;
-      max-height: 80vh;
-      overflow-y: auto;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+
+    .nav-btn.done .nav-num {
+      background: #22c55e;
+      color: #fff
     }
-    
-    /* Warning banner */
-    .warning-banner {
-      background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-      border-left: 4px solid #f59e0b;
-    }
-    
-    /* Progress bar */
-    .progress-bar {
-      height: 8px;
-      border-radius: 4px;
-      overflow: hidden;
-      background-color: #e5e7eb;
-    }
-    .progress-fill {
-      height: 100%;
-      background: linear-gradient(90deg, #4f46e5 0%, #6366f1 100%);
-      transition: width 0.3s ease;
-    }
-    
-    /* Sticky top bar */
-    .sticky-top {
+
+    /* Layout */
+    .topbar {
       position: sticky;
       top: 0;
       z-index: 100;
-      background: white;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      background: #fff;
+      border-bottom: 1px solid #e2e8f0;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, .06)
     }
-    
-    /* Section card */
-    .section-card {
-      background: white;
+
+    .layout {
+      max-width: 1280px;
+      margin: 0 auto;
+      display: flex
+    }
+
+    .sidebar {
+      width: 200px;
+      flex-shrink: 0;
+      background: #fff;
+      border-right: 1px solid #e2e8f0;
+      padding: 10px 8px;
+      min-height: calc(100vh - 52px);
+      overflow-y: auto
+    }
+
+    .content {
+      flex: 1;
+      padding: 16px;
+      overflow-x: hidden;
+      min-width: 0
+    }
+
+    /* Cards */
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      border: 1px solid #e2e8f0;
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .04)
+    }
+
+    .card-h {
+      font-size: 14px;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 2px
+    }
+
+    .card-sub {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-bottom: 12px
+    }
+
+    /* ======= COLUMN PICKER (star feature) ======= */
+    .cpicker {
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff
+    }
+
+    .cpicker-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 8px;
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+      flex-wrap: wrap
+    }
+
+    .cpicker-search {
+      flex: 1;
+      min-width: 100px;
+      padding: 5px 8px;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 6px;
+      font-size: 12px;
+      outline: none;
+      background: #fff;
+      transition: border-color .15s
+    }
+
+    .cpicker-search:focus {
+      border-color: #6366f1
+    }
+
+    .cpicker-btn {
+      padding: 4px 8px;
+      border: 1px solid #e2e8f0;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      background: #fff;
+      color: #64748b;
+      transition: .1s;
+      white-space: nowrap
+    }
+
+    .cpicker-btn:hover {
+      background: #eef2ff;
+      border-color: #a5b4fc;
+      color: #4338ca
+    }
+
+    .cpicker-btn.xnum {
+      border-color: #bbf7d0;
+      background: #f0fdf4;
+      color: #166534
+    }
+
+    .cpicker-btn.xnum:hover {
+      background: #dcfce7
+    }
+
+    .cpicker-btn.xcat {
+      border-color: #fde68a;
+      background: #fefce8;
+      color: #78350f
+    }
+
+    .cpicker-btn.xcat:hover {
+      background: #fef9c3
+    }
+
+    .cpicker-list {
+      max-height: 180px;
+      overflow-y: auto;
+      padding: 4px 0
+    }
+
+    .cpicker-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 10px;
+      cursor: pointer;
+      user-select: none;
+      transition: background .08s
+    }
+
+    .cpicker-item:hover {
+      background: #f8fafc
+    }
+
+    .cpicker-item.sel {
+      background: #eef2ff
+    }
+
+    .cpicker-item input {
+      display: none
+    }
+
+    .cpicker-check {
+      width: 16px;
+      height: 16px;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 4px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: .1s;
+      background: #fff
+    }
+
+    .cpicker-item.sel .cpicker-check {
+      background: #6366f1;
+      border-color: #6366f1
+    }
+
+    .cpicker-item.sel .cpicker-check::after {
+      content: '';
+      display: block;
+      width: 4px;
+      height: 7px;
+      border: 2px solid #fff;
+      border-top: none;
+      border-left: none;
+      transform: rotate(45deg) translate(-1px, -1px)
+    }
+
+    .cpicker-name {
+      flex: 1;
+      font-size: 12px;
+      font-weight: 500;
+      color: #374151;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap
+    }
+
+    .cpicker-type {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+      flex-shrink: 0
+    }
+
+    .type-num {
+      background: #dcfce7;
+      color: #166534
+    }
+
+    .type-cat {
+      background: #fef9c3;
+      color: #78350f
+    }
+
+    .cpicker-foot {
+      padding: 5px 10px;
+      background: #f8fafc;
+      border-top: 1px solid #e2e8f0;
+      font-size: 11px;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      justify-content: space-between
+    }
+
+    .cpicker-foot .auto-hint {
+      color: #6366f1;
+      font-weight: 600
+    }
+
+    .cpicker-hidden {
+      display: none
+    }
+
+    /* Option cards */
+    .opt-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 10px
+    }
+
+    .opt-c {
+      padding: 8px 12px;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 7px;
+      cursor: pointer;
+      transition: .1s;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      min-width: 120px;
+      flex: 1
+    }
+
+    .opt-c:hover {
+      border-color: #a5b4fc;
+      background: #fafafe
+    }
+
+    .opt-c.on {
+      border-color: #6366f1;
+      background: #eef2ff
+    }
+
+    .opt-c.on .oc-l {
+      color: #4338ca
+    }
+
+    .opt-c.danger.on {
+      border-color: #ef4444;
+      background: #fff1f2
+    }
+
+    .opt-c.danger.on .oc-l {
+      color: #dc2626
+    }
+
+    /* Toggle pills for binary choices */
+    .tg-row {
+      display: flex;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 10px
+    }
+
+    .tg-opt {
+      flex: 1;
+      padding: 9px 14px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      text-align: center;
+      color: #64748b;
+      background: #fff;
+      user-select: none;
+      position: relative;
+      border: none;
+      transition: .12s
+    }
+
+    .tg-opt+.tg-opt::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 15%;
+      height: 70%;
+      width: 1px;
+      background: #e2e8f0
+    }
+
+    .tg-opt input {
+      display: none
+    }
+
+    .tg-opt.on {
+      background: #6366f1;
+      color: #fff;
+      font-weight: 700
+    }
+
+    .tg-opt.on::before {
+      display: none
+    }
+
+    .oc-l {
+      font-size: 13px;
+      font-weight: 600;
+      color: #374151
+    }
+
+    .oc-h {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 2px
+    }
+
+    .oc-inp {
+      width: 80px;
+      padding: 3px 6px;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      font-size: 12px;
+      margin-top: 4px;
+      outline: none
+    }
+
+    .oc-inp:focus {
+      border-color: #6366f1
+    }
+
+    /* Stats */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: 8px;
+      margin-bottom: 12px
+    }
+
+    .stat-b {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 7px;
+      padding: 10px;
+      text-align: center
+    }
+
+    .stat-v {
+      font-size: 20px;
+      font-weight: 700;
+      color: #1e293b
+    }
+
+    .stat-l {
+      font-size: 10px;
+      color: #94a3b8;
+      margin-top: 1px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      font-weight: 600
+    }
+
+    /* Table */
+    .dt {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px
+    }
+
+    .dt th {
+      background: #f8fafc;
+      padding: 7px 10px;
+      text-align: left;
+      font-weight: 600;
+      border-bottom: 2px solid #e2e8f0;
+      color: #64748b;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .04em
+    }
+
+    .dt td {
+      padding: 7px 10px;
+      border-bottom: 1px solid #f1f5f9;
+      color: #374151
+    }
+
+    .dt tr:last-child td {
+      border-bottom: none
+    }
+
+    /* Badges */
+    .b {
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 700;
+      display: inline-block
+    }
+
+    .bg {
+      background: #dcfce7;
+      color: #166534
+    }
+
+    .by {
+      background: #fef9c3;
+      color: #78350f
+    }
+
+    .br {
+      background: #fee2e2;
+      color: #991b1b
+    }
+
+    .bgr {
+      background: #f1f5f9;
+      color: #64748b
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 9px 16px;
+      border: none;
+      border-radius: 7px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: .1s;
+      width: 100%;
+      margin-top: 8px
+    }
+
+    .btn:disabled {
+      opacity: .4;
+      cursor: not-allowed
+    }
+
+    .btn-i {
+      background: #6366f1;
+      color: #fff
+    }
+
+    .btn-i:hover:not(:disabled) {
+      background: #4f46e5
+    }
+
+    .btn-g {
+      background: #22c55e;
+      color: #fff
+    }
+
+    .btn-g:hover:not(:disabled) {
+      background: #16a34a
+    }
+
+    .btn-r {
+      background: #ef4444;
+      color: #fff
+    }
+
+    .btn-r:hover:not(:disabled) {
+      background: #dc2626
+    }
+
+    .btn-sm {
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      cursor: pointer;
+      background: #fff;
+      color: #64748b;
+      transition: .1s;
+      width: auto
+    }
+
+    .btn-sm:hover {
+      background: #f1f5f9
+    }
+
+    .info-link {
+      font-size: 12px;
+      color: #6366f1;
+      font-weight: 600;
+      border: 1.5px solid #c7d2fe;
+      border-radius: 6px;
+      padding: 3px 9px;
+      cursor: pointer;
+      background: #fff;
+      white-space: nowrap
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 18px;
+      right: 18px;
+      z-index: 9999;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: .2s;
+      pointer-events: none;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, .15)
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0)
+    }
+
+    .tok {
+      background: #22c55e;
+      color: #fff
+    }
+
+    .terr {
+      background: #ef4444;
+      color: #fff
+    }
+
+    .tinf {
+      background: #6366f1;
+      color: #fff
+    }
+
+    /* Modal */
+    .mbg {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, .4);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center
+    }
+
+    .mbg.show {
+      display: flex
+    }
+
+    .mbox {
+      background: #fff;
       border-radius: 12px;
-      border: 1px solid #e5e7eb;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-      transition: box-shadow 0.3s ease;
+      padding: 20px;
+      width: 90%;
+      max-width: 440px;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, .2)
     }
-    .section-card:hover {
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+
+    /* Tabs */
+    .tbar {
+      display: flex;
+      border-bottom: 2px solid #e2e8f0;
+      margin-bottom: 12px;
+      overflow-x: auto
     }
-    
-    /* Disabled state */
-    .btn-disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
+
+    .tab {
+      padding: 7px 14px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      color: #64748b;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: .1s;
+      white-space: nowrap
     }
-    
-    /* Mobile responsive */
-    @media (max-width: 768px) {
+
+    .tab.on {
+      color: #6366f1;
+      border-bottom-color: #6366f1;
+      font-weight: 700
+    }
+
+    /* Hr */
+    hr {
+      border: none;
+      border-top: 1px solid #e2e8f0;
+      margin: 12px 0
+    }
+
+    /* Mobile */
+    @media(max-width:660px) {
       .sidebar {
         position: fixed;
         left: -100%;
-        transition: left 0.3s ease;
-        z-index: 200;
+        top: 0;
         height: 100vh;
-        overflow-y: auto;
+        z-index: 200;
+        box-shadow: 4px 0 16px rgba(0, 0, 0, .1);
+        transition: left .2s;
+        width: 200px
       }
+
       .sidebar.open {
-        left: 0;
+        left: 0
       }
-      .main-content {
-        margin-left: 0;
+
+      .content {
+        padding: 10px
       }
+
+      .stats-row {
+        grid-template-columns: 1fr 1fr
+      }
+
+      .opt-row {
+        flex-direction: column
+      }
+    }
+
+    /* Row label */
+    .rl {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: #64748b;
+      margin-bottom: 5px
+    }
+
+    /* Div+inp */
+    .inp {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 7px;
+      font-size: 13px;
+      outline: none;
+      transition: .1s
+    }
+
+    .inp:focus {
+      border-color: #6366f1
     }
   </style>
 </head>
-<body class="bg-gray-50 text-gray-900">
+
+<body>
   <div id="ml-header"></div>
 
-  <!-- Sticky Top Bar -->
-  <div class="sticky-top py-4 px-6 border-b border-gray-200">
-    <div class="max-w-7xl mx-auto flex items-center justify-between flex-wrap gap-4">
-      <div class="flex items-center gap-6">
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <!-- Modal -->
+  <div id="modal" class="mbg" onclick="if(event.target===this)closeModal()">
+    <div class="mbox">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span id="modalT" style="font-size:14px;font-weight:700"></span>
+        <button onclick="closeModal()"
+          style="font-size:20px;background:none;border:none;cursor:pointer;color:#94a3b8;line-height:1">&times;</button>
+      </div>
+      <div id="modalB" style="font-size:13px;line-height:1.7;color:#475569"></div>
+    </div>
+  </div>
+
+  <!-- Overlay mobile -->
+  <div id="ov" onclick="closeSB()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:150">
+  </div>
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div
+      style="max-width:1280px;margin:0 auto;padding:8px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:10px">
+        <button id="menuBtn" onclick="toggleSB()" style="display:none" class="btn-sm">Menu</button>
         <div>
-          <h2 class="text-xl font-bold text-gray-900" id="datasetName">Dataset Name</h2>
-          <p class="text-sm text-gray-600" id="datasetStats">0 rows × 0 columns</p>
+          <div style="font-size:14px;font-weight:700" id="dsN">Loading...</div>
+          <div style="font-size:11px;color:#94a3b8" id="dsS">&nbsp;</div>
         </div>
       </div>
-      <div class="flex items-center gap-3">
-        <button id="undoBtn" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2" disabled>
-          <span>⟲</span> Undo
-        </button>
-        <button id="redoBtn" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2" disabled>
-          <span>⟳</span> Redo
-        </button>
-        <button id="resetBtn" class="px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors">
-          Reset to Original
-        </button>
+      <div style="display:flex;gap:6px">
+        <button id="undoB" onclick="undoA()" disabled class="btn-sm">Undo</button>
+        <button id="redoB" onclick="redoA()" disabled class="btn-sm">Redo</button>
+        <button onclick="resetA()" class="btn-sm"
+          style="border-color:#fca5a5;color:#dc2626;background:#fff1f2">Reset</button>
       </div>
     </div>
   </div>
 
-  <!-- Main Layout -->
-  <div class="flex max-w-7xl mx-auto">
-    <!-- Left Sidebar -->
-    <aside class="sidebar w-64 bg-white border-r border-gray-200 min-h-screen pt-6 pb-6">
-      <div class="px-4 mb-6">
-        <h3 class="text-lg font-semibold text-gray-900 mb-2">Preprocessing Steps</h3>
-        <p class="text-xs text-gray-500">Click to navigate</p>
-      </div>
-      <nav class="space-y-1 px-3">
-        <button class="sidebar-item w-full text-left px-4 py-3 rounded-lg font-medium text-sm active" data-section="missing">
-          <span class="flex items-center gap-2">
-            <span>1.</span> Missing Values
-          </span>
-        </button>
-        <button class="sidebar-item w-full text-left px-4 py-3 rounded-lg font-medium text-sm" data-section="duplicates">
-          <span class="flex items-center gap-2">
-            <span>2.</span> Duplicates
-          </span>
-        </button>
-        <button class="sidebar-item w-full text-left px-4 py-3 rounded-lg font-medium text-sm" data-section="constant">
-          <span class="flex items-center gap-2">
-            <span>3.</span> Constant Columns
-          </span>
-        </button>
-        <button class="sidebar-item w-full text-left px-4 py-3 rounded-lg font-medium text-sm" data-section="encoding">
-          <span class="flex items-center gap-2">
-            <span>4.</span> Encoding
-          </span>
-        </button>
-        <button class="sidebar-item w-full text-left px-4 py-3 rounded-lg font-medium text-sm" data-section="scaling">
-          <span class="flex items-center gap-2">
-            <span>5.</span> Feature Scaling
-          </span>
-        </button>
-        <button class="sidebar-item w-full text-left px-4 py-3 rounded-lg font-medium text-sm" data-section="outliers">
-          <span class="flex items-center gap-2">
-            <span>6.</span> Outlier Handling
-          </span>
-        </button>
-        <button class="sidebar-item w-full text-left px-4 py-3 rounded-lg font-medium text-sm" data-section="sampling">
-          <span class="flex items-center gap-2">
-            <span>7.</span> Sampling
-          </span>
-        </button>
-        <button class="sidebar-item w-full text-left px-4 py-3 rounded-lg font-medium text-sm" data-section="final">
-          <span class="flex items-center gap-2">
-            <span>8.</span> Final Actions
-          </span>
-        </button>
-      </nav>
-      
-      <!-- Action History -->
-      <div class="px-4 mt-8 pt-6 border-t border-gray-200">
-        <h4 class="text-sm font-semibold text-gray-700 mb-3">Action History</h4>
-        <div id="actionHistory" class="space-y-2 text-xs text-gray-600">
-          <p class="text-gray-400 italic">No actions yet</p>
-        </div>
-      </div>
+  <div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div
+        style="padding:0 4px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8">
+        Steps</div>
+      <button class="nav-btn active" data-s="missing" onclick="go('missing')"><span class="nav-num"
+          id="n1">1</span>Missing Values</button>
+      <button class="nav-btn" data-s="duplicates" onclick="go('duplicates')"><span class="nav-num"
+          id="n2">2</span>Duplicates</button>
+      <button class="nav-btn" data-s="constant" onclick="go('constant')"><span class="nav-num" id="n3">3</span>Constant
+        Cols</button>
+      <button class="nav-btn" data-s="encoding" onclick="go('encoding')"><span class="nav-num"
+          id="n4">4</span>Encoding</button>
+      <button class="nav-btn" data-s="scaling" onclick="go('scaling')"><span class="nav-num"
+          id="n5">5</span>Scaling</button>
+      <button class="nav-btn" data-s="outliers" onclick="go('outliers')"><span class="nav-num"
+          id="n6">6</span>Outliers</button>
+      <button class="nav-btn" data-s="sampling" onclick="go('sampling')"><span class="nav-num"
+          id="n7">7</span>Sampling</button>
+      <button class="nav-btn" data-s="report" onclick="go('report')"><span class="nav-num" id="n8">8</span>Report +
+        Export</button>
+      <hr style="margin:10px 0;border-color:#e2e8f0">
+      <div
+        style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;padding:0 4px;margin-bottom:6px">
+        History</div>
+      <div id="histL" style="font-size:11px;color:#64748b;max-height:280px;overflow-y:auto;padding:0 4px"></div>
     </aside>
 
-    <!-- Main Content Area -->
-    <main class="main-content flex-1 p-6">
-      <!-- Section 1: Missing Values -->
-      <section id="section-missing" class="section-content">
-        <div class="section-card p-6 mb-6">
-          <div class="flex items-center justify-between mb-6">
-            <h2 class="text-2xl font-bold text-gray-900">Missing (NULL) Value Analysis</h2>
-            <div class="info-tooltip">
-              <button class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 hover:bg-indigo-200 flex items-center justify-center transition-colors">
-                <span class="text-sm font-bold">i</span>
-              </button>
-              <div class="tooltip-content">
-                <strong>Missing Values Explained:</strong><br>
-                Missing values are treated as: NaN, NULL, empty strings, "NaN", "nan", "None".<br><br>
-                <strong>Mean:</strong> Average of all values (good for normal distributions)<br>
-                <strong>Median:</strong> Middle value (better for skewed data)<br>
-                <strong>Mode:</strong> Most frequent value (for categorical data)<br><br>
-                <strong>Warning:</strong> Dropping rows permanently removes data from your dataset.
-              </div>
+    <!-- Main content -->
+    <main class="content">
+
+      <!-- 1. MISSING VALUES -->
+      <div id="sec-missing" class="sec">
+        <div class="card" style="padding:12px">
+          <div class="stats-row">
+            <div class="stat-b">
+              <div class="stat-v" id="mv-t">-</div>
+              <div class="stat-l">Missing</div>
             </div>
-          </div>
-
-          <!-- Summary Cards -->
-          <div class="grid md:grid-cols-2 gap-4 mb-6">
-            <div class="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
-              <div class="flex items-center justify-between mb-2">
-                <span class="text-sm font-medium text-gray-700">Total Missing %</span>
-                <span class="text-2xl font-bold text-indigo-600" id="totalMissingPct">0%</span>
-              </div>
-              <div class="progress-bar">
-                <div class="progress-fill" id="missingProgressBar" style="width: 0%"></div>
-              </div>
+            <div class="stat-b">
+              <div class="stat-v" id="mv-p">-</div>
+              <div class="stat-l">% of Data</div>
             </div>
-            <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
-              <div class="flex items-center justify-between">
-                <span class="text-sm font-medium text-gray-700">Total Missing Count</span>
-                <span class="text-2xl font-bold text-gray-700" id="totalMissingCount">0</span>
-              </div>
+            <div class="stat-b">
+              <div class="stat-v" id="mv-c">-</div>
+              <div class="stat-l">Affected Cols</div>
             </div>
-          </div>
-
-          <!-- Pie Chart -->
-          <div class="mb-6">
-            <h3 class="text-lg font-semibold mb-3">Missing Values by Column</h3>
-            <div id="missingPieChart" style="height: 300px;"></div>
-          </div>
-
-          <!-- Missing Values Table -->
-          <div class="mb-6">
-            <h3 class="text-lg font-semibold mb-3">Column Details</h3>
-            <div class="overflow-x-auto">
-              <table class="w-full text-sm border-collapse">
-                <thead>
-                  <tr class="bg-indigo-50">
-                    <th class="border border-gray-300 px-4 py-2 text-left font-semibold">Column</th>
-                    <th class="border border-gray-300 px-4 py-2 text-left font-semibold">Data Type</th>
-                    <th class="border border-gray-300 px-4 py-2 text-center font-semibold">% Missing</th>
-                    <th class="border border-gray-300 px-4 py-2 text-center font-semibold">Count Missing</th>
-                  </tr>
-                </thead>
-                <tbody id="missingTableBody" class="bg-white">
-                  <!-- Populated dynamically -->
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- Actions -->
-          <div class="border-t border-gray-200 pt-6">
-            <h3 class="text-lg font-semibold mb-4">Handle Missing Values</h3>
-            <div class="space-y-4">
-              <div>
-                <label class="block text-sm font-medium mb-2">Select Column(s)</label>
-                <select id="missingColumnSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900" multiple size="5">
-                  <!-- Populated dynamically -->
-                </select>
-                <p class="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple columns</p>
-              </div>
-              
-              <div>
-                <label class="block text-sm font-medium mb-2">Action</label>
-                <div class="space-y-3">
-                  <label class="flex items-center">
-                    <input type="radio" name="missingAction" value="drop" class="mr-2">
-                    <span>Drop rows with missing values</span>
-                  </label>
-                  <div class="ml-6 space-y-2">
-                    <label class="flex items-center">
-                      <input type="radio" name="missingAction" value="mean" class="mr-2">
-                      <span>Fill numerical with Mean</span>
-                    </label>
-                    <label class="flex items-center">
-                      <input type="radio" name="missingAction" value="median" class="mr-2">
-                      <span>Fill numerical with Median</span>
-                    </label>
-                    <label class="flex items-center">
-                      <input type="radio" name="missingAction" value="constant_num" class="mr-2">
-                      <span>Fill numerical with Constant:</span>
-                      <input type="number" id="constantNumValue" class="ml-2 px-2 py-1 border border-gray-300 rounded w-24" placeholder="0">
-                    </label>
-                  </div>
-                  <div class="ml-6 space-y-2">
-                    <label class="flex items-center">
-                      <input type="radio" name="missingAction" value="mode" class="mr-2">
-                      <span>Fill categorical with Mode</span>
-                    </label>
-                    <label class="flex items-center">
-                      <input type="radio" name="missingAction" value="constant_cat" class="mr-2">
-                      <span>Fill categorical with Constant:</span>
-                      <input type="text" id="constantCatValue" class="ml-2 px-2 py-1 border border-gray-300 rounded w-32" placeholder="Unknown">
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              <button id="applyMissingBtn" class="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium">
-                Apply Changes
-              </button>
+            <div class="stat-b">
+              <div class="stat-v" id="mv-r">-</div>
+              <div class="stat-l">Total Rows</div>
             </div>
           </div>
         </div>
-      </section>
-
-      <!-- Section 2: Duplicates -->
-      <section id="section-duplicates" class="section-content hidden">
-        <div class="section-card p-6 mb-6">
-          <div class="flex items-center justify-between mb-6">
-            <h2 class="text-2xl font-bold text-gray-900">Duplicate Data Handling</h2>
-            <div class="info-tooltip">
-              <button class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 hover:bg-indigo-200 flex items-center justify-center transition-colors">
-                <span class="text-sm font-bold">i</span>
-              </button>
-              <div class="tooltip-content">
-                <strong>What are Duplicates?</strong><br>
-                Duplicate rows are rows that have identical values across all columns.<br><br>
-                <strong>Impact of Removal:</strong><br>
-                Removing duplicates can improve model performance by eliminating redundant information. However, ensure duplicates are truly redundant and not meaningful data points.
-              </div>
-            </div>
+        <div class="card" style="padding:0;overflow:hidden">
+          <div style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:13px;font-weight:700">Missing by Column</span>
+            <button class="info-link" onclick="showInfo('missing')">What is this?</button>
           </div>
-
-          <!-- Summary Cards -->
-          <div class="grid md:grid-cols-2 gap-4 mb-6">
-            <div class="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
-              <div class="flex items-center justify-between">
-                <span class="text-sm font-medium text-gray-700">Total Duplicate Rows</span>
-                <span class="text-2xl font-bold text-yellow-600" id="duplicateCount">0</span>
-              </div>
-            </div>
-            <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
-              <div class="flex items-center justify-between">
-                <span class="text-sm font-medium text-gray-700">Duplicate Columns</span>
-                <span class="text-2xl font-bold text-gray-700" id="duplicateColumns">0</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Duplicate Preview Table -->
-          <div class="mb-6">
-            <h3 class="text-lg font-semibold mb-3">Duplicate Rows Preview</h3>
-            <div class="overflow-x-auto">
-              <table class="w-full text-sm border-collapse">
-                <thead>
-                  <tr class="bg-yellow-50" id="duplicateTableHead">
-                    <!-- Populated dynamically -->
-                  </tr>
-                </thead>
-                <tbody id="duplicateTableBody" class="bg-white">
-                  <!-- Populated dynamically -->
-                </tbody>
-              </table>
-            </div>
-            <p class="text-xs text-gray-500 mt-2">Showing first 10 duplicate rows (highlighted)</p>
-          </div>
-
-          <!-- Actions -->
-          <div class="border-t border-gray-200 pt-6">
-            <h3 class="text-lg font-semibold mb-4">Remove Duplicates</h3>
-            <div class="space-y-4">
-              <div>
-                <label class="flex items-center">
-                  <input type="radio" name="duplicateKeep" value="first" checked class="mr-2">
-                  <span>Keep first occurrence</span>
-                </label>
-                <label class="flex items-center mt-2">
-                  <input type="radio" name="duplicateKeep" value="last" class="mr-2">
-                  <span>Keep last occurrence</span>
-                </label>
-              </div>
-              <button id="applyDuplicateBtn" class="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium">
-                Drop Duplicate Rows
-              </button>
-            </div>
+          <div style="overflow-x:auto">
+            <table class="dt" id="mvT">
+              <thead>
+                <tr>
+                  <th>Column</th>
+                  <th>Type</th>
+                  <th>Missing</th>
+                  <th>%</th>
+                  <th>Level</th>
+                </tr>
+              </thead>
+              <tbody id="mvB"></tbody>
+            </table>
           </div>
         </div>
-      </section>
 
-      <!-- Section 3: Constant Columns -->
-      <section id="section-constant" class="section-content hidden">
-        <div class="section-card p-6 mb-6">
-          <div class="flex items-center justify-between mb-6">
-            <h2 class="text-2xl font-bold text-gray-900">Constant / Low-Variance Columns</h2>
-            <div class="info-tooltip">
-              <button class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 hover:bg-indigo-200 flex items-center justify-center transition-colors">
-                <span class="text-sm font-bold">i</span>
-              </button>
-              <div class="tooltip-content">
-                <strong>Why Remove Constant Columns?</strong><br>
-                Constant columns have the same value across all rows, providing no information for model training. They can:<br>
-                • Waste computational resources<br>
-                • Cause numerical instability<br>
-                • Mislead feature importance metrics<br><br>
-                Removing them improves model efficiency and performance.
-              </div>
-            </div>
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
+            <div class="card-h">Fix Numerical Columns</div>
+            <span style="font-size:11px;color:#94a3b8">numbers only</span>
           </div>
-
-          <!-- Constant Columns List -->
-          <div class="mb-6">
-            <h3 class="text-lg font-semibold mb-3">Detected Constant Columns</h3>
-            <div id="constantColumnsList" class="space-y-2">
-              <p class="text-gray-500 italic">No constant columns detected</p>
-            </div>
+          <div class="card-sub">Leave all unchecked to apply to every numerical column</div>
+          <div id="pk-numMis" class="cpicker"></div>
+          <hr>
+          <div class="rl">Fill Method</div>
+          <div class="opt-row" id="og-numMis">
+            <label class="opt-c" onclick="optPick(this,'og-numMis')"><input type="radio" name="nMis" value="mean"><span
+                class="oc-l">Mean</span><span class="oc-h">Column average</span></label>
+            <label class="opt-c" onclick="optPick(this,'og-numMis')"><input type="radio" name="nMis"
+                value="median"><span class="oc-l">Median</span><span class="oc-h">Safe for skewed data</span></label>
+            <label class="opt-c" onclick="optPick(this,'og-numMis')"><input type="radio" name="nMis"
+                value="constant_num"><span class="oc-l">Number: <input type="number" class="oc-inp" id="cNum" value="0"
+                  onclick="event.stopPropagation()"></span><span class="oc-h">Custom fill value</span></label>
+            <label class="opt-c danger" onclick="optPick(this,'og-numMis')"><input type="radio" name="nMis"
+                value="drop"><span class="oc-l">Drop Rows</span><span class="oc-h">Removes rows
+                permanently</span></label>
           </div>
-
-          <!-- Actions -->
-          <div class="border-t border-gray-200 pt-6">
-            <h3 class="text-lg font-semibold mb-4">Remove Selected Columns</h3>
-            <button id="applyConstantBtn" class="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-              Drop Selected Column(s)
-            </button>
-          </div>
+          <button class="btn btn-i" id="applyNMBtn" onclick="applyNM()">Apply to Numerical Columns</button>
         </div>
-      </section>
 
-      <!-- Section 4: Encoding -->
-      <section id="section-encoding" class="section-content hidden">
-        <div class="section-card p-6 mb-6">
-          <div class="flex items-center justify-between mb-6">
-            <h2 class="text-2xl font-bold text-gray-900">Categorical Encoding</h2>
-            <div class="info-tooltip">
-              <button class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 hover:bg-indigo-200 flex items-center justify-center transition-colors">
-                <span class="text-sm font-bold">i</span>
-              </button>
-              <div class="tooltip-content">
-                <strong>Encoding Methods:</strong><br>
-                <strong>Label:</strong> Assigns integer labels (0, 1, 2...) - use for ordinal data<br>
-                <strong>One-Hot:</strong> Creates binary columns for each category - use for nominal data<br>
-                <strong>Ordinal:</strong> Manual ordering of categories - use when order matters<br>
-                <strong>Target:</strong> Encodes by target mean - powerful but can cause data leakage<br><br>
-                <strong>⚠️ Warning:</strong> Target encoding can leak target information if not done carefully during cross-validation.
-              </div>
-            </div>
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
+            <div class="card-h">Fix Categorical Columns</div>
+            <span style="font-size:11px;color:#94a3b8">text / categories</span>
           </div>
-
-          <!-- Encoding Tabs -->
-          <div class="mb-6">
-            <div class="flex border-b border-gray-200 mb-4">
-              <button class="encoding-tab px-4 py-2 font-medium text-sm border-b-2 border-indigo-600 text-indigo-600" data-encoding="label">Label Encoding</button>
-              <button class="encoding-tab px-4 py-2 font-medium text-sm text-gray-600 hover:text-gray-900" data-encoding="onehot">One-Hot Encoding</button>
-              <button class="encoding-tab px-4 py-2 font-medium text-sm text-gray-600 hover:text-gray-900" data-encoding="ordinal">Ordinal Encoding</button>
-              <button class="encoding-tab px-4 py-2 font-medium text-sm text-gray-600 hover:text-gray-900" data-encoding="target">Target Encoding</button>
-            </div>
-
-            <!-- Label Encoding Panel -->
-            <div id="panel-label" class="encoding-panel">
-              <div class="space-y-4">
-                <div>
-                  <label class="block text-sm font-medium mb-2">Select Column(s)</label>
-                  <select id="labelColumnSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900" multiple size="5">
-                    <!-- Populated dynamically -->
-                  </select>
-                </div>
-                <button id="applyLabelBtn" class="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium">
-                  Apply Label Encoding
-                </button>
-              </div>
-            </div>
-
-            <!-- One-Hot Encoding Panel -->
-            <div id="panel-onehot" class="encoding-panel hidden">
-              <div class="space-y-4">
-                <div>
-                  <label class="block text-sm font-medium mb-2">Select Column(s)</label>
-                  <select id="onehotColumnSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900" multiple size="5">
-                    <!-- Populated dynamically -->
-                  </select>
-                </div>
-                <div>
-                  <label class="flex items-center">
-                    <input type="checkbox" id="onehotDropFirst" class="mr-2">
-                    <span>Drop first column (avoid multicollinearity)</span>
-                  </label>
-                </div>
-                <div>
-                  <label class="flex items-center">
-                    <input type="checkbox" id="onehotHandleBinary" class="mr-2">
-                    <span>Handle binary columns separately</span>
-                  </label>
-                </div>
-                <div class="bg-blue-50 rounded-lg p-3 border border-blue-200">
-                  <p class="text-sm text-gray-700">
-                    <strong>Preview:</strong> <span id="onehotPreview">0</span> new columns will be created
-                  </p>
-                </div>
-                <button id="applyOnehotBtn" class="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium">
-                  Apply One-Hot Encoding
-                </button>
-              </div>
-            </div>
-
-            <!-- Ordinal Encoding Panel -->
-            <div id="panel-ordinal" class="encoding-panel hidden">
-              <div class="space-y-4">
-                <div>
-                  <label class="block text-sm font-medium mb-2">Select Column</label>
-                  <select id="ordinalColumnSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900">
-                    <option value="">Select a column...</option>
-                    <!-- Populated dynamically -->
-                  </select>
-                </div>
-                <div>
-                  <label class="flex items-center mb-2">
-                    <input type="checkbox" id="ordinalAutoOrder" class="mr-2">
-                    <span>Auto-detect category order</span>
-                  </label>
-                </div>
-                <div id="ordinalManualOrder" class="hidden">
-                  <label class="block text-sm font-medium mb-2">Manual Category Order (comma-separated)</label>
-                  <input type="text" id="ordinalOrderInput" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="e.g., Low, Medium, High">
-                  <p class="text-xs text-gray-500 mt-1">Enter categories in desired order</p>
-                </div>
-                <button id="applyOrdinalBtn" class="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium">
-                  Apply Ordinal Encoding
-                </button>
-              </div>
-            </div>
-
-            <!-- Target Encoding Panel -->
-            <div id="panel-target" class="encoding-panel hidden">
-              <div class="space-y-4">
-                <div class="warning-banner rounded-lg p-4 mb-4">
-                  <p class="text-sm font-medium text-yellow-800">
-                    ⚠️ <strong>Warning:</strong> Target encoding can cause data leakage. Use with caution and proper cross-validation.
-                  </p>
-                </div>
-                <div>
-                  <label class="block text-sm font-medium mb-2">Select Column(s)</label>
-                  <select id="targetColumnSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900" multiple size="5">
-                    <!-- Populated dynamically -->
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-sm font-medium mb-2">Target Column</label>
-                  <select id="targetTargetSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900">
-                    <option value="">Select target column...</option>
-                    <!-- Populated dynamically -->
-                  </select>
-                </div>
-                <button id="applyTargetBtn" class="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium">
-                  Apply Target Encoding
-                </button>
-              </div>
-            </div>
+          <div class="card-sub">Leave all unchecked to apply to every categorical column</div>
+          <div id="pk-catMis" class="cpicker"></div>
+          <hr>
+          <div class="rl">Fill Method</div>
+          <div class="opt-row" id="og-catMis">
+            <label class="opt-c" onclick="optPick(this,'og-catMis')"><input type="radio" name="cMis" value="mode"><span
+                class="oc-l">Mode</span><span class="oc-h">Most common value</span></label>
+            <label class="opt-c" onclick="optPick(this,'og-catMis')"><input type="radio" name="cMis"
+                value="constant_cat"><span class="oc-l">Custom: <input type="text" class="oc-inp" id="cCat"
+                  value="Unknown" onclick="event.stopPropagation()"></span><span class="oc-h">Your chosen
+                text</span></label>
+            <label class="opt-c danger" onclick="optPick(this,'og-catMis')"><input type="radio" name="cMis"
+                value="drop"><span class="oc-l">Drop Rows</span><span class="oc-h">Removes rows
+                permanently</span></label>
           </div>
+          <button class="btn" id="applyCMBtn" style="background:#f59e0b;color:#fff;margin-top:8px"
+            onclick="applyCM()">Apply to
+            Categorical Columns</button>
         </div>
-      </section>
+      </div>
 
-      <!-- Section 5: Feature Scaling -->
-      <section id="section-scaling" class="section-content hidden">
-        <div class="section-card p-6 mb-6">
-          <div class="flex items-center justify-between mb-6">
-            <h2 class="text-2xl font-bold text-gray-900">Feature Scaling</h2>
-            <div class="info-tooltip">
-              <button class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 hover:bg-indigo-200 flex items-center justify-center transition-colors">
-                <span class="text-sm font-bold">i</span>
-              </button>
-              <div class="tooltip-content">
-                <strong>Scaling Methods:</strong><br>
-                <strong>Standard (Z-score):</strong> (x - μ) / σ<br>
-                Mean=0, Std=1. Best for normal distributions.<br><br>
-                <strong>Min-Max:</strong> (x - min) / (max - min)<br>
-                Range [0, 1]. Good for bounded features.<br><br>
-                <strong>Robust:</strong> Uses median and IQR<br>
-                Resistant to outliers. Best for skewed data.<br><br>
-                <strong>Required for:</strong> KNN, SVM, Neural Networks, PCA, Gradient Descent
-              </div>
+      <!-- 2. DUPLICATES -->
+      <div id="sec-duplicates" class="sec" style="display:none">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div class="card-h">Duplicate Rows</div>
+            <button class="info-link" onclick="showInfo('duplicates')">What is this?</button>
+          </div>
+          <div class="stats-row">
+            <div class="stat-b">
+              <div class="stat-v" id="d-c">-</div>
+              <div class="stat-l">Duplicates</div>
+            </div>
+            <div class="stat-b">
+              <div class="stat-v" id="d-u">-</div>
+              <div class="stat-l">Unique Rows</div>
+            </div>
+            <div class="stat-b">
+              <div class="stat-v" id="d-p">-</div>
+              <div class="stat-l">% Duplicate</div>
             </div>
           </div>
+          <div id="d-prev" style="overflow-x:auto;font-size:12px;margin-bottom:10px"></div>
+          <hr>
+          <div style="font-size:12px;color:#64748b;margin-bottom:6px">Which copy to keep when duplicates are found?
+          </div>
+          <div class="tg-row">
+            <label class="tg-opt on" onclick="tgPick(this)"><input type="radio" name="dKeep" value="first" checked>Keep
+              First Occurrence</label>
+            <label class="tg-opt" onclick="tgPick(this)"><input type="radio" name="dKeep" value="last">Keep Last
+              Occurrence</label>
+          </div>
+          <button class="btn btn-r" id="dupBtn" onclick="applyDup()">Remove Duplicate Rows</button>
+        </div>
+      </div>
 
-          <!-- Scaler Selection -->
-          <div class="mb-6">
-            <label class="block text-sm font-medium mb-2">Select Scaler</label>
-            <select id="scalerSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900">
-              <option value="standard">Standard Scaler (Z-score)</option>
-              <option value="minmax">Min-Max Scaler</option>
-              <option value="robust">Robust Scaler</option>
+      <!-- 3. CONSTANT COLUMNS -->
+      <div id="sec-constant" class="sec" style="display:none">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <div class="card-h">Constant Columns</div>
+            <button class="info-link" onclick="showInfo('constant')">What is this?</button>
+          </div>
+          <div class="card-sub">Columns with the same value in every row — zero information, safe to remove.</div>
+          <div id="constL"></div>
+          <button class="btn btn-r" id="constBtn" onclick="applyConst()" disabled style="margin-top:10px">Remove
+            Selected</button>
+        </div>
+      </div>
+
+      <!-- 4. ENCODING -->
+      <div id="sec-encoding" class="sec" style="display:none">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div class="card-h">Categorical Encoding</div>
+            <button class="info-link" onclick="showInfo('encoding')">What is this?</button>
+          </div>
+          <div class="tbar">
+            <button class="tab on" data-et="label" onclick="eTab('label')">Label</button>
+            <button class="tab" data-et="onehot" onclick="eTab('onehot')">One-Hot</button>
+            <button class="tab" data-et="ordinal" onclick="eTab('ordinal')">Ordinal</button>
+            <button class="tab" data-et="target" onclick="eTab('target')">Target</button>
+          </div>
+          <div id="et-label" class="ep">
+            <div class="card-sub" style="margin-bottom:8px">Converts each category to a number (0,1,2...). Leave all
+              unchecked = apply to all.</div>
+            <div id="pk-label" class="cpicker"></div>
+            <button class="btn btn-i" id="applyLabelBtn" onclick="applyLabel()">Apply Label Encoding</button>
+          </div>
+          <div id="et-onehot" class="ep" style="display:none">
+            <div class="card-sub" style="margin-bottom:8px">Creates one binary column per category. Leave all unchecked
+              = apply to all.</div>
+            <div id="pk-onehot" class="cpicker"></div>
+            <label style="display:flex;align-items:center;gap:7px;font-size:13px;margin:8px 0;cursor:pointer"><input
+                type="checkbox" id="ohDrop"> Drop first column (avoids multicollinearity)</label>
+            <button class="btn btn-i" id="applyOHBtn" onclick="applyOnehot()">Apply One-Hot Encoding</button>
+          </div>
+          <div id="et-ordinal" class="ep" style="display:none">
+            <div class="card-sub" style="margin-bottom:8px">Assign order-based numbers. Use when order matters (Low,
+              Medium, High).</div>
+            <div class="rl">Select Column</div>
+            <select id="ordC" class="inp" style="margin-bottom:8px"></select>
+            <label
+              style="display:flex;align-items:center;gap:7px;font-size:13px;margin-bottom:6px;cursor:pointer"><input
+                type="checkbox" id="ordA" checked onchange="toggleOrdM()"> Auto-detect order</label>
+            <div id="ordM" style="display:none;margin-bottom:8px">
+              <div class="rl">Order (comma-separated, lowest first)</div><input type="text" id="ordO" class="inp"
+                placeholder="e.g. Low, Medium, High">
+            </div>
+            <button class="btn btn-i" id="applyOrdBtn" onclick="applyOrdinal()">Apply Ordinal Encoding</button>
+          </div>
+          <div id="et-target" class="ep" style="display:none">
+            <div
+              style="background:#fff7ed;border:1px solid #fed7aa;border-radius:7px;padding:8px 10px;margin-bottom:8px;font-size:12px;color:#92400e">
+              Warning: Can cause data leakage. Use with proper cross-validation.</div>
+            <div class="rl">Columns to Encode</div>
+            <div id="pk-target" class="cpicker" style="margin-bottom:8px"></div>
+            <div class="rl">Target Column</div>
+            <select id="tgtC" class="inp" style="margin-bottom:8px">
+              <option value="">Select...</option>
             </select>
-          </div>
-
-          <!-- Column Selection -->
-          <div class="mb-6">
-            <label class="block text-sm font-medium mb-2">Select Numerical Column(s)</label>
-            <select id="scalingColumnSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900" multiple size="5">
-              <!-- Populated dynamically -->
-            </select>
-            <p class="text-xs text-gray-500 mt-1">Only numerical columns are shown</p>
-          </div>
-
-          <!-- Before/After Preview -->
-          <div class="mb-6">
-            <h3 class="text-lg font-semibold mb-3">Distribution Preview</h3>
-            <div class="grid md:grid-cols-2 gap-4">
-              <div>
-                <h4 class="text-sm font-medium mb-2 text-gray-700">Before Scaling</h4>
-                <div id="scalingBeforeChart" style="height: 250px;"></div>
-              </div>
-              <div>
-                <h4 class="text-sm font-medium mb-2 text-gray-700">After Scaling (Preview)</h4>
-                <div id="scalingAfterChart" style="height: 250px;"></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Apply Button -->
-          <button id="applyScalingBtn" class="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium">
-            Apply Scaling
-          </button>
-        </div>
-      </section>
-
-      <!-- Section 6: Outlier Handling -->
-      <section id="section-outliers" class="section-content hidden">
-        <div class="section-card p-6 mb-6">
-          <div class="flex items-center justify-between mb-6">
-            <h2 class="text-2xl font-bold text-gray-900">Outlier Handling</h2>
-            <div class="info-tooltip">
-              <button class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 hover:bg-indigo-200 flex items-center justify-center transition-colors">
-                <span class="text-sm font-bold">i</span>
-              </button>
-              <div class="tooltip-content">
-                <strong>Detection Methods:</strong><br>
-                <strong>IQR Method:</strong> Outliers = values < Q1-1.5×IQR or > Q3+1.5×IQR<br>
-                Q1=25th percentile, Q3=75th percentile, IQR=Q3-Q1<br><br>
-                <strong>Z-Score Method:</strong> Outliers = |z| > 3<br>
-                z = (x - μ) / σ<br><br>
-                <strong>⚠️ When NOT to Remove:</strong><br>
-                • Outliers represent valid rare events<br>
-                • Small dataset (removal reduces sample size)<br>
-                • Outliers are the target of prediction
-              </div>
-            </div>
-          </div>
-
-          <!-- Warning Banner -->
-          <div class="warning-banner rounded-lg p-4 mb-6">
-            <p class="text-sm font-medium text-yellow-800">
-              ⚠️ <strong>Warning:</strong> Removing outliers will permanently remove rows from your dataset. Consider capping or flagging instead.
-            </p>
-          </div>
-
-          <!-- Detection Method -->
-          <div class="mb-6">
-            <label class="block text-sm font-medium mb-2">Detection Method</label>
-            <select id="outlierMethodSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900">
-              <option value="iqr">IQR Method</option>
-              <option value="zscore">Z-Score Method</option>
-            </select>
-          </div>
-
-          <!-- Column Selection -->
-          <div class="mb-6">
-            <label class="block text-sm font-medium mb-2">Select Numerical Column(s)</label>
-            <select id="outlierColumnSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900" multiple size="5">
-              <!-- Populated dynamically -->
-            </select>
-          </div>
-
-          <!-- Summary Cards -->
-          <div class="grid md:grid-cols-2 gap-4 mb-6">
-            <div class="bg-red-50 rounded-lg p-4 border border-red-200">
-              <div class="flex items-center justify-between">
-                <span class="text-sm font-medium text-gray-700">Outlier Rows Detected</span>
-                <span class="text-2xl font-bold text-red-600" id="outlierCount">0</span>
-              </div>
-            </div>
-            <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
-              <div class="flex items-center justify-between">
-                <span class="text-sm font-medium text-gray-700">% of Dataset Affected</span>
-                <span class="text-2xl font-bold text-gray-700" id="outlierPct">0%</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Actions -->
-          <div class="border-t border-gray-200 pt-6">
-            <h3 class="text-lg font-semibold mb-4">Outlier Actions</h3>
-            <div class="space-y-4">
-              <label class="flex items-center">
-                <input type="radio" name="outlierAction" value="remove" class="mr-2">
-                <span>Remove outlier rows</span>
-              </label>
-              <label class="flex items-center">
-                <input type="radio" name="outlierAction" value="cap" class="mr-2">
-                <span>Cap values (Winsorization)</span>
-              </label>
-              <label class="flex items-center">
-                <input type="radio" name="outlierAction" value="flag" class="mr-2">
-                <span>Add outlier flag column</span>
-              </label>
-              <button id="applyOutlierBtn" class="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium">
-                Apply Outlier Handling
-              </button>
-            </div>
+            <button class="btn btn-i" id="applyTgtBtn" onclick="applyTarget()">Apply Target Encoding</button>
           </div>
         </div>
-      </section>
+      </div>
 
-      <!-- Section 7: Sampling -->
-      <section id="section-sampling" class="section-content hidden">
-        <div class="section-card p-6 mb-6">
-          <div class="flex items-center justify-between mb-6">
-            <h2 class="text-2xl font-bold text-gray-900">Over-Sampling & Under-Sampling</h2>
-            <div class="info-tooltip">
-              <button class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 hover:bg-indigo-200 flex items-center justify-center transition-colors">
-                <span class="text-sm font-bold">i</span>
-              </button>
-              <div class="tooltip-content">
-                <strong>Why Balance Classes?</strong><br>
-                Imbalanced datasets can make models appear accurate while failing on minority classes.<br><br>
-                <strong>Impact on Metrics:</strong><br>
-                • Accuracy can be misleading (e.g., 95% accuracy with 95% majority class)<br>
-                • Recall & F1-score better reflect performance on minority classes<br>
-                • Balanced data improves model generalization<br><br>
-                <strong>Methods:</strong><br>
-                • SMOTE: Synthetic Minority Oversampling (creates synthetic samples)<br>
-                • Random Over/Under: Simple duplication or removal
-              </div>
-            </div>
+      <!-- 5. SCALING -->
+      <div id="sec-scaling" class="sec" style="display:none">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <div class="card-h">Feature Scaling</div>
+            <button class="info-link" onclick="showInfo('scaling')">What is this?</button>
           </div>
-
-          <!-- Class Distribution Chart -->
-          <div class="mb-6">
-            <h3 class="text-lg font-semibold mb-3">Class Distribution</h3>
-            <div id="classDistributionChart" style="height: 300px;"></div>
-            <p class="text-sm text-gray-600 mt-2" id="imbalanceInfo">Imbalance: 0%</p>
+          <div class="card-sub">Puts all numbers on the same scale. Required for KNN, SVM, Neural Networks.</div>
+          <div class="rl">Method</div>
+          <div class="opt-row" id="og-scaler" style="margin-bottom:12px">
+            <label class="opt-c on" onclick="optPick(this,'og-scaler')"><input type="radio" name="scM" value="standard"
+                checked><span class="oc-l">Standard</span><span class="oc-h">Mean=0, Std=1</span></label>
+            <label class="opt-c" onclick="optPick(this,'og-scaler')"><input type="radio" name="scM" value="minmax"><span
+                class="oc-l">Min-Max</span><span class="oc-h">Scales to 0-1</span></label>
+            <label class="opt-c" onclick="optPick(this,'og-scaler')"><input type="radio" name="scM" value="robust"><span
+                class="oc-l">Robust</span><span class="oc-h">Best for outliers</span></label>
           </div>
-
-          <!-- Sampling Method -->
-          <div class="mb-6">
-            <label class="block text-sm font-medium mb-2">Sampling Method</label>
-            <select id="samplingMethodSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900">
-              <option value="">No sampling</option>
-              <option value="smote">SMOTE (Synthetic Minority Oversampling)</option>
-              <option value="over">Random Over Sampling</option>
-              <option value="under">Random Under Sampling</option>
-            </select>
-          </div>
-
-          <!-- Target Column Selection -->
-          <div class="mb-6">
-            <label class="block text-sm font-medium mb-2">Target Column (for class balance)</label>
-            <select id="samplingTargetSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900">
-              <option value="">Select target column...</option>
-              <!-- Populated dynamically -->
-            </select>
-          </div>
-
-          <!-- Apply Button -->
-          <button id="applySamplingBtn" class="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium">
-            Apply Sampling
-          </button>
+          <div class="rl">Numerical Columns <span style="text-transform:none;font-weight:400;color:#94a3b8">(leave
+              unchecked = apply to all)</span></div>
+          <div id="pk-scale" class="cpicker"></div>
+          <button class="btn btn-i" id="applyScaleBtn" onclick="applyScaling()">Apply Scaling</button>
         </div>
-      </section>
+      </div>
 
-      <!-- Section 8: Final Actions -->
-      <section id="section-final" class="section-content hidden">
-        <div class="section-card p-6 mb-6">
-          <div class="flex items-center justify-between mb-6">
-            <h2 class="text-2xl font-bold text-gray-900">Final Actions</h2>
-            <div class="info-tooltip">
-              <button class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 hover:bg-indigo-200 flex items-center justify-center transition-colors">
-                <span class="text-sm font-bold">i</span>
-              </button>
-              <div class="tooltip-content">
-                <strong>Best Practices Before Training:</strong><br>
-                • Review all preprocessing steps applied<br>
-                • Verify dataset shape and statistics<br>
-                • Check for any remaining issues<br>
-                • Export cleaned dataset for backup<br>
-                • Proceed to training with confidence
-              </div>
+      <!-- 6. OUTLIERS -->
+      <div id="sec-outliers" class="sec" style="display:none">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <div class="card-h">Outlier Handling</div>
+            <button class="info-link" onclick="showInfo('outliers')">What is this?</button>
+          </div>
+          <div class="card-sub">Extreme values that distort model training. Only remove if they are actual errors.</div>
+          <div class="rl" style="margin-bottom:5px">Detection Method</div>
+          <div class="tg-row" style="margin-bottom:12px">
+            <label class="tg-opt on" onclick="tgPick(this)"><input type="radio" name="oD" value="iqr" checked>IQR <span
+                style="font-size:11px;opacity:.7">(most data)</span></label>
+            <label class="tg-opt" onclick="tgPick(this)"><input type="radio" name="oD" value="zscore">Z-Score <span
+                style="font-size:11px;opacity:.7">(normal dist.)</span></label>
+          </div>
+          <div class="rl">Numerical Columns <span style="text-transform:none;font-weight:400;color:#94a3b8">(leave
+              unchecked = apply to all)</span></div>
+          <div id="pk-out" class="cpicker" style="margin-bottom:12px"></div>
+          <div class="rl">Action</div>
+          <div class="opt-row" id="og-outAct">
+            <label class="opt-c" onclick="optPick(this,'og-outAct')"><input type="radio" name="oA" value="remove"><span
+                class="oc-l">Remove Rows</span><span class="oc-h">Dataset gets smaller</span></label>
+            <label class="opt-c on" onclick="optPick(this,'og-outAct')"><input type="radio" name="oA" value="cap"
+                checked><span class="oc-l">Cap Values</span><span class="oc-h">Clips, keeps all rows</span></label>
+            <label class="opt-c" onclick="optPick(this,'og-outAct')"><input type="radio" name="oA" value="flag"><span
+                class="oc-l">Flag Only</span><span class="oc-h">Adds a flag column</span></label>
+          </div>
+          <button class="btn btn-i" id="applyOutBtn" onclick="applyOut()">Apply Outlier Handling</button>
+        </div>
+      </div>
+
+      <!-- 7. SAMPLING -->
+      <div id="sec-sampling" class="sec" style="display:none">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <div class="card-h">Class Balancing</div>
+            <button class="info-link" onclick="showInfo('sampling')">What is this?</button>
+          </div>
+          <div class="card-sub">Balance unequal class counts in your target column.</div>
+          <div class="rl">Target Column</div>
+          <select id="sampT" class="inp" onchange="loadDist()" style="margin-bottom:10px">
+            <option value="">Select target column...</option>
+          </select>
+          <div id="distB" style="display:none;margin-bottom:10px">
+            <div id="distP" style="height:200px"></div>
+            <p id="distM" style="font-size:12px;color:#64748b;margin-top:4px"></p>
+          </div>
+          <div class="rl">Method</div>
+          <div class="opt-row" id="og-samp">
+            <label class="opt-c on" onclick="optPick(this,'og-samp')"><input type="radio" name="sM" value="smote"
+                checked><span class="oc-l">SMOTE</span><span class="oc-h">Creates synthetic samples</span></label>
+            <label class="opt-c" onclick="optPick(this,'og-samp')"><input type="radio" name="sM" value="over"><span
+                class="oc-l">Over-Sample</span><span class="oc-h">Duplicates minority rows</span></label>
+            <label class="opt-c" onclick="optPick(this,'og-samp')"><input type="radio" name="sM" value="under"><span
+                class="oc-l">Under-Sample</span><span class="oc-h">Removes majority rows</span></label>
+          </div>
+          <button class="btn btn-i" id="applySampBtn" onclick="applySamp()">Apply Sampling</button>
+        </div>
+      </div>
+
+      <!-- 8. REPORT -->
+      <div id="sec-report" class="sec" style="display:none">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div class="card-h">Preprocessing Report</div>
+            <button class="btn-sm" onclick="loadReport()" style="border-color:#c7d2fe;color:#6366f1">Refresh</button>
+          </div>
+          <div class="stats-row">
+            <div class="stat-b">
+              <div class="stat-v" id="r-or">-</div>
+              <div class="stat-l">Orig Rows</div>
+            </div>
+            <div class="stat-b">
+              <div class="stat-v" id="r-cr" style="color:#6366f1">-</div>
+              <div class="stat-l">Now Rows</div>
+            </div>
+            <div class="stat-b">
+              <div class="stat-v" id="r-oc">-</div>
+              <div class="stat-l">Orig Cols</div>
+            </div>
+            <div class="stat-b">
+              <div class="stat-v" id="r-cc" style="color:#6366f1">-</div>
+              <div class="stat-l">Now Cols</div>
+            </div>
+            <div class="stat-b">
+              <div class="stat-v" id="r-st" style="color:#22c55e">0</div>
+              <div class="stat-l">Steps Done</div>
             </div>
           </div>
-
-          <!-- Summary of Applied Steps -->
-          <div class="mb-6">
-            <h3 class="text-lg font-semibold mb-3">Preprocessing Summary</h3>
-            <div id="preprocessingSummary" class="bg-gray-50 rounded-lg p-4 border border-gray-200">
-              <p class="text-sm text-gray-600">No preprocessing steps applied yet.</p>
-            </div>
+          <div class="rl">Steps Applied</div>
+          <div id="rSteps" style="margin-bottom:12px">
+            <p style="font-size:12px;color:#94a3b8;font-style:italic">No steps yet.</p>
           </div>
-
-          <!-- Final Dataset Stats -->
-          <div class="grid md:grid-cols-3 gap-4 mb-6">
-            <div class="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
-              <div class="text-sm font-medium text-gray-700 mb-1">Final Rows</div>
-              <div class="text-2xl font-bold text-indigo-600" id="finalRows">0</div>
-            </div>
-            <div class="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
-              <div class="text-sm font-medium text-gray-700 mb-1">Final Columns</div>
-              <div class="text-2xl font-bold text-indigo-600" id="finalColumns">0</div>
-            </div>
-            <div class="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
-              <div class="text-sm font-medium text-gray-700 mb-1">Steps Applied</div>
-              <div class="text-2xl font-bold text-indigo-600" id="stepsApplied">0</div>
-            </div>
+          <div class="rl">Data Quality</div>
+          <div style="overflow-x:auto;margin-bottom:12px">
+            <table class="dt">
+              <thead>
+                <tr>
+                  <th>Check</th>
+                  <th>Status</th>
+                  <th>Detail</th>
+                </tr>
+              </thead>
+              <tbody id="rQual"></tbody>
+            </table>
           </div>
-
-          <!-- Action Buttons -->
-          <div class="space-y-4">
-            <button id="exportDatasetBtn" class="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium">
-              Export Updated Dataset
-            </button>
-            <button id="proceedTrainingBtn" class="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium">
-              Proceed to Model Training →
-            </button>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <button class="btn btn-g" onclick="exportCSV()">Download CSV</button>
+            <button class="btn btn-i" onclick="goTrain()">Go to Training</button>
           </div>
         </div>
-      </section>
+      </div>
+
     </main>
   </div>
 
-  <!-- Mobile Menu Toggle -->
-  <button id="mobileMenuToggle" class="fixed bottom-4 right-4 md:hidden bg-indigo-600 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center z-50">
-    <span class="text-xl">☰</span>
-  </button>
-
-  <!-- Scripts -->
-  <script>
-    // Global state
-    const API_BASE = 'http://127.0.0.1:8001/api';
-    let sessionId = null;
-    let currentSection = 'missing';
-    let allColumns = [];
-    let numericalColumns = [];
-    let categoricalColumns = [];
-    let currentStats = null;
-
-    // Initialize
-    document.addEventListener('DOMContentLoaded', function() {
-      const urlParams = new URLSearchParams(window.location.search);
-      sessionId = urlParams.get('session_id') || localStorage.getItem('session_id');
-
-      if (!sessionId) {
-        alert('No session ID found. Please upload a dataset first.');
-        window.location.href = 'upload.html';
-        return;
-      }
-
-      initializeUI();
-      loadDatasetInfo();
-      loadColumns();
-      loadMissingValuesAnalysis();
-    });
-    
-    async function loadColumns() {
-      try {
-        // Try to get columns from EDA endpoint
-        const edaResponse = await fetch(`${API_BASE}/eda/${sessionId}`);
-        if (edaResponse.ok) {
-          const edaData = await edaResponse.json();
-          if (edaData.statistics) {
-            allColumns = edaData.statistics.columns || [];
-            numericalColumns = edaData.statistics.numerical_columns || [];
-            categoricalColumns = edaData.statistics.categorical_columns || [];
-            populateAllColumnSelects();
-          }
-        }
-      } catch (error) {
-        console.error('Error loading columns:', error);
-        // Fallback: try to get from stats
-        if (currentStats && currentStats.columns) {
-          allColumns = currentStats.columns;
-          populateAllColumnSelects();
-        }
-      }
-    }
-    
-    function populateAllColumnSelects() {
-      // Populate all column selects
-      const selects = [
-        'missingColumnSelect', 'labelColumnSelect', 'onehotColumnSelect',
-        'ordinalColumnSelect', 'targetColumnSelect', 'scalingColumnSelect',
-        'outlierColumnSelect', 'samplingTargetSelect', 'targetTargetSelect'
-      ];
-      
-      selects.forEach(selectId => {
-        const select = document.getElementById(selectId);
-        if (select) {
-          const isMulti = select.multiple;
-          select.innerHTML = '';
-          
-          if (selectId === 'scalingColumnSelect' || selectId === 'outlierColumnSelect') {
-            // Numerical columns only
-            numericalColumns.forEach(col => {
-              const option = document.createElement('option');
-              option.value = col;
-              option.textContent = col;
-              select.appendChild(option);
-            });
-          } else if (selectId === 'labelColumnSelect' || selectId === 'onehotColumnSelect' || 
-                     selectId === 'targetColumnSelect' || selectId === 'ordinalColumnSelect') {
-            // Categorical columns
-            categoricalColumns.forEach(col => {
-              const option = document.createElement('option');
-              option.value = col;
-              option.textContent = col;
-              select.appendChild(option);
-            });
-          } else {
-            // All columns
-            allColumns.forEach(col => {
-              const option = document.createElement('option');
-              option.value = col;
-              option.textContent = col;
-              select.appendChild(option);
-            });
-          }
-        }
-      });
-    }
-
-    function initializeUI() {
-      // Sidebar navigation
-      document.querySelectorAll('.sidebar-item').forEach(btn => {
-        btn.addEventListener('click', function() {
-          const section = this.dataset.section;
-          switchSection(section);
-        });
-      });
-
-      // Encoding tabs
-      document.querySelectorAll('.encoding-tab').forEach(tab => {
-        tab.addEventListener('click', function() {
-          const encoding = this.dataset.encoding;
-          switchEncodingTab(encoding);
-        });
-      });
-
-      // Mobile menu toggle
-      const mobileToggle = document.getElementById('mobileMenuToggle');
-      const sidebar = document.querySelector('.sidebar');
-      if (mobileToggle) {
-        mobileToggle.addEventListener('click', () => {
-          sidebar.classList.toggle('open');
-        });
-      }
-
-      // Undo/Redo buttons
-      document.getElementById('undoBtn').addEventListener('click', undoAction);
-      document.getElementById('redoBtn').addEventListener('click', redoAction);
-      document.getElementById('resetBtn').addEventListener('click', resetDataset);
-
-      // Apply buttons with real backend integration
-      document.getElementById('applyMissingBtn').addEventListener('click', handleMissingValues);
-      document.getElementById('applyDuplicateBtn').addEventListener('click', handleDuplicates);
-      document.getElementById('applyConstantBtn').addEventListener('click', handleConstantColumns);
-      document.getElementById('applyLabelBtn').addEventListener('click', handleLabelEncoding);
-      document.getElementById('applyOnehotBtn').addEventListener('click', handleOneHotEncoding);
-      document.getElementById('applyOrdinalBtn').addEventListener('click', handleOrdinalEncoding);
-      document.getElementById('applyTargetBtn').addEventListener('click', handleTargetEncoding);
-      document.getElementById('applyScalingBtn').addEventListener('click', handleScaling);
-      document.getElementById('applyOutlierBtn').addEventListener('click', handleOutliers);
-      document.getElementById('applySamplingBtn').addEventListener('click', handleSampling);
-      
-      // Load section data when switching
-      document.querySelectorAll('.sidebar-item').forEach(btn => {
-        btn.addEventListener('click', function() {
-          const section = this.dataset.section;
-          loadSectionData(section);
-        });
-      });
-
-      // Final actions
-      document.getElementById('exportDatasetBtn').addEventListener('click', exportDataset);
-      document.getElementById('proceedTrainingBtn').addEventListener('click', proceedToTraining);
-
-      // Ordinal encoding auto/manual toggle
-      document.getElementById('ordinalAutoOrder').addEventListener('change', function() {
-        document.getElementById('ordinalManualOrder').classList.toggle('hidden', this.checked);
-      });
-
-      // One-hot preview update
-      document.getElementById('onehotColumnSelect').addEventListener('change', updateOnehotPreview);
-    }
-
-    function switchSection(section) {
-      // Update sidebar
-      document.querySelectorAll('.sidebar-item').forEach(btn => {
-        btn.classList.remove('active');
-        if (btn.dataset.section === section) {
-          btn.classList.add('active');
-        }
-      });
-
-      // Update content
-      document.querySelectorAll('.section-content').forEach(sec => {
-        sec.classList.add('hidden');
-      });
-      document.getElementById(`section-${section}`).classList.remove('hidden');
-
-      currentSection = section;
-
-      // Close mobile menu
-      document.querySelector('.sidebar').classList.remove('open');
-    }
-
-    function switchEncodingTab(encoding) {
-      // Update tabs
-      document.querySelectorAll('.encoding-tab').forEach(tab => {
-        tab.classList.remove('border-indigo-600', 'text-indigo-600');
-        tab.classList.add('text-gray-600');
-        if (tab.dataset.encoding === encoding) {
-          tab.classList.add('border-indigo-600', 'text-indigo-600');
-          tab.classList.remove('text-gray-600');
-        }
-      });
-
-      // Update panels
-      document.querySelectorAll('.encoding-panel').forEach(panel => {
-        panel.classList.add('hidden');
-      });
-      document.getElementById(`panel-${encoding}`).classList.remove('hidden');
-    }
-
-    async function checkBackendConnection() {
-      try {
-        const response = await fetch(`${API_BASE.replace('/api', '')}/health`);
-        return response.ok;
-      } catch (error) {
-        return false;
-      }
-    }
-    
-    async function loadDatasetInfo() {
-      // Check backend connection first
-      const isConnected = await checkBackendConnection();
-      if (!isConnected) {
-        document.getElementById('datasetName').textContent = 'Backend Not Connected';
-        document.getElementById('datasetStats').textContent = 'Please start the backend server on port 8001';
-        alert('Backend server is not running. Please start it on port 8001.\n\nRun: python Backend/run_server.py');
-        return;
-      }
-      
-      try {
-        const response = await fetch(`${API_BASE}/preprocessing/${sessionId}/stats`);
-        if (!response.ok) {
-          if (response.status === 404) {
-            alert('Session not found. Please upload a dataset first.');
-            window.location.href = 'upload.html';
-            return;
-          }
-          throw new Error('Failed to load dataset stats');
-        }
-        
-        const data = await response.json();
-        currentStats = data;
-        
-        document.getElementById('datasetName').textContent = data.dataset_name || 'Dataset';
-        document.getElementById('datasetStats').textContent = `${data.current_rows} rows × ${data.current_columns} columns`;
-        updateDatasetStats(data.current_rows, data.current_columns);
-        updateUndoRedoButtons(data.can_undo, data.can_redo);
-        
-        // Load action history
-        await loadActionHistory();
-      } catch (error) {
-        console.error('Error loading dataset info:', error);
-        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-          alert('Cannot connect to backend server.\n\nPlease make sure:\n1. Backend is running on port 8001\n2. Run: python Backend/run_server.py\n3. Check firewall settings');
-        } else {
-          alert('Failed to load dataset information: ' + error.message);
-        }
-      }
-    }
-
-    async function loadActionHistory() {
-      try {
-        const response = await fetch(`${API_BASE}/preprocessing/${sessionId}/history`);
-        if (!response.ok) return;
-        
-        const history = await response.json();
-        const container = document.getElementById('actionHistory');
-        
-        if (history.length === 0) {
-          container.innerHTML = '<p class="text-gray-400 italic">No actions yet</p>';
-        } else {
-          container.innerHTML = history.slice().reverse().map(action => 
-            `<p class="text-xs">${new Date(action.timestamp).toLocaleTimeString()}: ${action.description}</p>`
-          ).join('');
-        }
-        
-        document.getElementById('stepsApplied').textContent = history.length;
-      } catch (error) {
-        console.error('Error loading action history:', error);
-      }
-    }
-
-    function updateDatasetStats(rows, cols) {
-      document.getElementById('datasetStats').textContent = `${rows} rows × ${cols} columns`;
-      document.getElementById('finalRows').textContent = rows;
-      document.getElementById('finalColumns').textContent = cols;
-    }
-
-    function updateUndoRedoButtons(canUndo, canRedo) {
-      document.getElementById('undoBtn').disabled = !canUndo;
-      document.getElementById('redoBtn').disabled = !canRedo;
-    }
-
-    async function undoAction() {
-      try {
-        const response = await fetch(`${API_BASE}/preprocessing/${sessionId}/undo`, { method: 'POST' });
-        if (!response.ok) {
-          const error = await response.json();
-          alert(error.detail || 'Nothing to undo');
-          return;
-        }
-        await loadDatasetInfo();
-        await loadSectionData(currentSection);
-        showSuccess('Action undone successfully');
-      } catch (error) {
-        console.error('Error undoing action:', error);
-        alert('Failed to undo action');
-      }
-    }
-
-    async function redoAction() {
-      try {
-        const response = await fetch(`${API_BASE}/preprocessing/${sessionId}/redo`, { method: 'POST' });
-        if (!response.ok) {
-          const error = await response.json();
-          alert(error.detail || 'Nothing to redo');
-          return;
-        }
-        await loadDatasetInfo();
-        await loadSectionData(currentSection);
-        showSuccess('Action redone successfully');
-      } catch (error) {
-        console.error('Error redoing action:', error);
-        alert('Failed to redo action');
-      }
-    }
-
-    async function resetDataset() {
-      if (!confirm('Are you sure you want to reset to the original dataset? All preprocessing steps will be lost.')) {
-        return;
-      }
-      
-      try {
-        const response = await fetch(`${API_BASE}/preprocessing/${sessionId}/reset`, { method: 'POST' });
-        if (!response.ok) throw new Error('Failed to reset');
-        
-        await loadDatasetInfo();
-        await loadSectionData(currentSection);
-        showSuccess('Dataset reset to original state');
-      } catch (error) {
-        console.error('Error resetting dataset:', error);
-        alert('Failed to reset dataset');
-      }
-    }
-
-    function loadSectionData(section) {
-      switch(section) {
-        case 'missing':
-          loadMissingValuesAnalysis();
-          break;
-        case 'duplicates':
-          loadDuplicatesAnalysis();
-          break;
-        case 'constant':
-          loadConstantColumns();
-          break;
-        case 'sampling':
-          // Will load when target column is selected
-          break;
-      }
-    }
-
-    // ==================== Missing Values ====================
-    
-    async function loadMissingValuesAnalysis() {
-      try {
-        const response = await fetch(`${API_BASE}/preprocessing/${sessionId}/missing-values`);
-        if (!response.ok) throw new Error('Failed to load missing values analysis');
-        
-        const data = await response.json();
-        
-        // Update summary cards
-        document.getElementById('totalMissingPct').textContent = `${data.total_null_percentage}%`;
-        document.getElementById('totalMissingCount').textContent = data.total_null_count;
-        document.getElementById('missingProgressBar').style.width = `${data.total_null_percentage}%`;
-        
-        // Update table
-        const tbody = document.getElementById('missingTableBody');
-        tbody.innerHTML = data.columns.map(col => `
-          <tr class="hover:bg-indigo-50">
-            <td class="border border-gray-300 px-4 py-2">${col.column}</td>
-            <td class="border border-gray-300 px-4 py-2">${col.data_type}</td>
-            <td class="border border-gray-300 px-4 py-2 text-center">${col.null_percentage}%</td>
-            <td class="border border-gray-300 px-4 py-2 text-center">${col.null_count}</td>
-          </tr>
-        `).join('');
-        
-        // Update pie chart
-        const complete = 100 - data.total_null_percentage;
-        const missingData = [{
-          values: [complete, data.total_null_percentage],
-          labels: ['Complete', 'Missing'],
-          type: 'pie',
-          marker: { colors: ['#4f46e5', '#ef4444'] }
-        }];
-        Plotly.newPlot('missingPieChart', missingData, {
-          title: 'Missing Values Distribution',
-          height: 300
-        });
-        
-        // Populate column select
-        populateColumnSelect('missingColumnSelect', data.columns.map(c => c.column));
-      } catch (error) {
-        console.error('Error loading missing values:', error);
-      }
-    }
-    
-    async function handleMissingValues() {
-      const columns = Array.from(document.getElementById('missingColumnSelect').selectedOptions).map(opt => opt.value);
-      const strategy = document.querySelector('input[name="missingAction"]:checked')?.value;
-      
-      if (!strategy) {
-        alert('Please select an action strategy');
-        return;
-      }
-      
-      const requestBody = {
-        columns: columns.length > 0 ? columns : null,
-        strategy: strategy
-      };
-      
-      if (strategy === 'constant_num') {
-        requestBody.constant_value = parseFloat(document.getElementById('constantNumValue').value);
-      } else if (strategy === 'constant_cat') {
-        requestBody.constant_string = document.getElementById('constantCatValue').value;
-      }
-      
-      try {
-        showLoading('applyMissingBtn', 'Applying...');
-        const response = await fetch(`${API_BASE}/preprocessing/${sessionId}/missing-values`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestBody)
-        });
-        
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.detail || 'Failed to handle missing values');
-        }
-        
-        await loadDatasetInfo();
-        await loadMissingValuesAnalysis();
-        showSuccess('Missing values handled successfully');
-      } catch (error) {
-        console.error('Error handling missing values:', error);
-        alert(error.message || 'Failed to handle missing values');
-      } finally {
-        hideLoading('applyMissingBtn', 'Apply Changes');
-      }
-    }
-    
-    // ==================== Duplicates ====================
-    
-    async function loadDuplicatesAnalysis() {
-      try {
-        const response = await fetch(`${API_BASE}/preprocessing/${sessionId}/duplicates`);
-        if (!response.ok) throw new Error('Failed to load duplicates analysis');
-        
-        const data = await response.json();
-        
-        document.getElementById('duplicateCount').textContent = data.duplicate_row_count;
-        document.getElementById('duplicateColumns').textContent = data.duplicate_column_count;
-        
-        // Update preview table
-        if (data.preview && data.preview.rows) {
-          const thead = document.getElementById('duplicateTableHead');
-          const tbody = document.getElementById('duplicateTableBody');
-          
-          thead.innerHTML = `<th class="border border-gray-300 px-4 py-2 text-left">${data.preview.columns.join('</th><th class="border border-gray-300 px-4 py-2 text-left">')}</th>`;
-          tbody.innerHTML = data.preview.rows.map(row => `
-            <tr class="bg-yellow-50">
-              ${row.map(cell => `<td class="border border-gray-300 px-4 py-2">${cell}</td>`).join('')}
-            </tr>
-          `).join('');
-        }
-      } catch (error) {
-        console.error('Error loading duplicates:', error);
-      }
-    }
-    
-    async function handleDuplicates() {
-      const keep = document.querySelector('input[name="duplicateKeep"]:checked')?.value || 'first';
-      
-      try {
-        showLoading('applyDuplicateBtn', 'Removing...');
-        const response = await fetch(`${API_BASE}/preprocessing/${sessionId}/duplicates`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ keep })
-        });
-        
-        if (!response.ok) throw new Error('Failed to remove duplicates');
-        
-        await loadDatasetInfo();
-        await loadDuplicatesAnalysis();
-        showSuccess('Duplicates removed successfully');
-      } catch (error) {
-        console.error('Error removing duplicates:', error);
-        alert(error.message || 'Failed to remove duplicates');
-      } finally {
-        hideLoading('applyDuplicateBtn', 'Drop Duplicate Rows');
-      }
-    }
-    
-    // ==================== Constant Columns ====================
-    
-    async function loadConstantColumns() {
-      try {
-        const response = await fetch(`${API_BASE}/preprocessing/${sessionId}/constant-columns`);
-        if (!response.ok) throw new Error('Failed to load constant columns');
-        
-        const data = await response.json();
-        const container = document.getElementById('constantColumnsList');
-        
-        if (data.constant_column_count === 0) {
-          container.innerHTML = '<p class="text-gray-500 italic">No constant columns detected</p>';
-          document.getElementById('applyConstantBtn').disabled = true;
-        } else {
-          container.innerHTML = data.constant_columns.map(col => `
-            <label class="flex items-center p-2 hover:bg-gray-50 rounded">
-              <input type="checkbox" value="${col.column}" class="constant-col-checkbox mr-2">
-              <span class="flex-1">
-                <strong>${col.column}</strong> - Constant value: <code>${col.constant_value}</code>
-              </span>
-            </label>
-          `).join('');
-          document.getElementById('applyConstantBtn').disabled = false;
-        }
-      } catch (error) {
-        console.error('Error loading constant columns:', error);
-      }
-    }
-    
-    async function handleConstantColumns() {
-      const selected = Array.from(document.querySelectorAll('.constant-col-checkbox:checked')).map(cb => cb.value);
-      
-      if (selected.length === 0) {
-        alert('Please select at least one column to remove');
-        return;
-      }
-      
-      try {
-        showLoading('applyConstantBtn', 'Removing...');
-        const response = await fetch(`${API_BASE}/preprocessing/${sessionId}/constant-columns`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ columns: selected })
-        });
-        
-        if (!response.ok) throw new Error('Failed to remove constant columns');
-        
-        await loadDatasetInfo();
-        await loadConstantColumns();
-        showSuccess('Constant columns removed successfully');
-      } catch (error) {
-        console.error('Error removing constant columns:', error);
-        alert(error.message || 'Failed to remove constant columns');
-      } finally {
-        hideLoading('applyConstantBtn', 'Drop Selected Column(s)');
-      }
-    }
-    
-    // ==================== Encoding ====================
-    
-    async function handleLabelEncoding() {
-      const columns = Array.from(document.getElementById('labelColumnSelect').selectedOptions).map(opt => opt.value);
-      if (columns.length === 0) {
-        alert('Please select at least one column');
-        return;
-      }
-      
-      try {
-        showLoading('applyLabelBtn', 'Encoding...');
-        const response = await fetch(`${API_BASE}/preprocessing/${sessionId}/encoding/label`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ columns })
-        });
-        
-        if (!response.ok) throw new Error('Failed to apply label encoding');
-        
-        await loadDatasetInfo();
-        showSuccess('Label encoding applied successfully');
-      } catch (error) {
-        console.error('Error applying label encoding:', error);
-        alert(error.message || 'Failed to apply label encoding');
-      } finally {
-        hideLoading('applyLabelBtn', 'Apply Label Encoding');
-      }
-    }
-    
-    async function handleOneHotEncoding() {
-      const columns = Array.from(document.getElementById('onehotColumnSelect').selectedOptions).map(opt => opt.value);
-      if (columns.length === 0) {
-        alert('Please select at least one column');
-        return;
-      }
-      
-      const dropFirst = document.getElementById('onehotDropFirst').checked;
-      const handleBinary = document.getElementById('onehotHandleBinary').checked;
-      
-      try {
-        showLoading('applyOnehotBtn', 'Encoding...');
-        const response = await fetch(`${API_BASE}/preprocessing/${sessionId}/encoding/onehot`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ columns, drop_first: dropFirst, handle_binary: handleBinary })
-        });
-        
-        if (!response.ok) throw new Error('Failed to apply one-hot encoding');
-        
-        await loadDatasetInfo();
-        showSuccess('One-hot encoding applied successfully');
-      } catch (error) {
-        console.error('Error applying one-hot encoding:', error);
-        alert(error.message || 'Failed to apply one-hot encoding');
-      } finally {
-        hideLoading('applyOnehotBtn', 'Apply One-Hot Encoding');
-      }
-    }
-    
-    async function handleOrdinalEncoding() {
-      const column = document.getElementById('ordinalColumnSelect').value;
-      if (!column) {
-        alert('Please select a column');
-        return;
-      }
-      
-      const autoOrder = document.getElementById('ordinalAutoOrder').checked;
-      const categories = autoOrder ? null : document.getElementById('ordinalOrderInput').value.split(',').map(s => s.trim());
-      
-      try {
-        showLoading('applyOrdinalBtn', 'Encoding...');
-        const response = await fetch(`${API_BASE}/preprocessing/${sessionId}/encoding/ordinal`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ column, auto_order: autoOrder, categories })
-        });
-        
-        if (!response.ok) throw new Error('Failed to apply ordinal encoding');
-        
-        await loadDatasetInfo();
-        showSuccess('Ordinal encoding applied successfully');
-      } catch (error) {
-        console.error('Error applying ordinal encoding:', error);
-        alert(error.message || 'Failed to apply ordinal encoding');
-      } finally {
-        hideLoading('applyOrdinalBtn', 'Apply Ordinal Encoding');
-      }
-    }
-    
-    async function handleTargetEncoding() {
-      const columns = Array.from(document.getElementById('targetColumnSelect').selectedOptions).map(opt => opt.value);
-      const targetColumn = document.getElementById('targetTargetSelect').value;
-      
-      if (columns.length === 0 || !targetColumn) {
-        alert('Please select columns and target column');
-        return;
-      }
-      
-      try {
-        showLoading('applyTargetBtn', 'Encoding...');
-        const response = await fetch(`${API_BASE}/preprocessing/${sessionId}/encoding/target`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ columns, target_column: targetColumn })
-        });
-        
-        if (!response.ok) throw new Error('Failed to apply target encoding');
-        
-        await loadDatasetInfo();
-        showSuccess('Target encoding applied successfully');
-      } catch (error) {
-        console.error('Error applying target encoding:', error);
-        alert(error.message || 'Failed to apply target encoding');
-      } finally {
-        hideLoading('applyTargetBtn', 'Apply Target Encoding');
-      }
-    }
-    
-    // ==================== Scaling ====================
-    
-    async function handleScaling() {
-      const columns = Array.from(document.getElementById('scalingColumnSelect').selectedOptions).map(opt => opt.value);
-      const method = document.getElementById('scalerSelect').value;
-      
-      if (columns.length === 0) {
-        alert('Please select at least one column');
-        return;
-      }
-      
-      try {
-        showLoading('applyScalingBtn', 'Scaling...');
-        const response = await fetch(`${API_BASE}/preprocessing/${sessionId}/scaling`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ columns, method })
-        });
-        
-        if (!response.ok) throw new Error('Failed to apply scaling');
-        
-        await loadDatasetInfo();
-        showSuccess('Feature scaling applied successfully');
-      } catch (error) {
-        console.error('Error applying scaling:', error);
-        alert(error.message || 'Failed to apply scaling');
-      } finally {
-        hideLoading('applyScalingBtn', 'Apply Scaling');
-      }
-    }
-    
-    // ==================== Outliers ====================
-    
-    async function handleOutliers() {
-      const columns = Array.from(document.getElementById('outlierColumnSelect').selectedOptions).map(opt => opt.value);
-      const method = document.getElementById('outlierMethodSelect').value;
-      const action = document.querySelector('input[name="outlierAction"]:checked')?.value;
-      
-      if (columns.length === 0 || !action) {
-        alert('Please select columns and action');
-        return;
-      }
-      
-      try {
-        showLoading('applyOutlierBtn', 'Processing...');
-        const response = await fetch(`${API_BASE}/preprocessing/${sessionId}/outliers/handle`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ columns, method, action, threshold: 3.0 })
-        });
-        
-        if (!response.ok) throw new Error('Failed to handle outliers');
-        
-        await loadDatasetInfo();
-        showSuccess('Outliers handled successfully');
-      } catch (error) {
-        console.error('Error handling outliers:', error);
-        alert(error.message || 'Failed to handle outliers');
-      } finally {
-        hideLoading('applyOutlierBtn', 'Apply Outlier Handling');
-      }
-    }
-    
-    // ==================== Sampling ====================
-    
-    async function handleSampling() {
-      const targetColumn = document.getElementById('samplingTargetSelect').value;
-      const method = document.getElementById('samplingMethodSelect').value;
-      
-      if (!targetColumn || !method) {
-        alert('Please select target column and sampling method');
-        return;
-      }
-      
-      try {
-        showLoading('applySamplingBtn', 'Sampling...');
-        const response = await fetch(`${API_BASE}/preprocessing/${sessionId}/sampling`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ target_column: targetColumn, method })
-        });
-        
-        if (!response.ok) throw new Error('Failed to apply sampling');
-        
-        await loadDatasetInfo();
-        showSuccess('Sampling applied successfully');
-      } catch (error) {
-        console.error('Error applying sampling:', error);
-        alert(error.message || 'Failed to apply sampling');
-      } finally {
-        hideLoading('applySamplingBtn', 'Apply Sampling');
-      }
-    }
-    
-    // ==================== Utility Functions ====================
-    
-    function populateColumnSelect(selectId, columns) {
-      const select = document.getElementById(selectId);
-      if (!select) return;
-      
-      select.innerHTML = columns.map(col => `<option value="${col}">${col}</option>`).join('');
-    }
-    
-    function showLoading(buttonId, text) {
-      const btn = document.getElementById(buttonId);
-      if (btn) {
-        btn.disabled = true;
-        btn.textContent = text;
-      }
-    }
-    
-    function hideLoading(buttonId, text) {
-      const btn = document.getElementById(buttonId);
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = text;
-      }
-    }
-    
-    function showSuccess(message) {
-      // Simple success notification (can be enhanced with toast library)
-      console.log('Success:', message);
-    }
-    
-    function updateOnehotPreview() {
-      const selected = Array.from(document.getElementById('onehotColumnSelect').selectedOptions);
-      const preview = selected.length * 3; // Simplified estimate
-      document.getElementById('onehotPreview').textContent = preview;
-    }
-
-    async function exportDataset() {
-      try {
-        // This would call the export endpoint
-        alert('Export functionality will be implemented in the export service');
-      } catch (error) {
-        console.error('Error exporting dataset:', error);
-        alert('Failed to export dataset');
-      }
-    }
-
-    function proceedToTraining() {
-      window.location.href = `training.html?session_id=${sessionId}`;
-    }
-  </script>
+  <script src="preprocessing_script.js"></script>
   <script src="header.js"></script>
 </body>
+
 </html>
