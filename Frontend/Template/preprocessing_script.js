@@ -2,7 +2,11 @@
 var API = 'http://127.0.0.1:8000/api';
 var SID = null;
 var numCols = [], catCols = [], allCols = [];
+var numColsWithNull = [], catColsWithNull = [];  // only cols that have nulls
 var encodedCols = new Set();
+var scaledCols = new Set();      // columns that have been scaled (front-end tracking)
+var _scalingStack = [];          // undo stack: each entry = array of cols scaled in that batch
+var _scalingRedoStack = [];      // redo stack: mirrors undo for redo-of-scaling ops
 var origShape = null;
 var _plotlyLoaded = false;
 var _pickers = {};
@@ -202,8 +206,10 @@ async function loadCols() {
 }
 
 function _rebuildPickers() {
-    buildPicker('numMis', numCols, 'num');
-    buildPicker('catMis', catCols, 'cat');
+    // Missing value pickers: only show columns that actually have nulls
+    _buildMissingPicker('numMis', numColsWithNull, 'num');
+    _buildMissingPicker('catMis', catColsWithNull, 'cat');
+    // Encoding / scaling / outlier pickers use all columns as before
     buildPicker('label', catCols, 'cat', encodedCols);
     buildPicker('onehot', catCols, 'cat', encodedCols);
     buildPicker('target', catCols, 'cat', encodedCols);
@@ -213,6 +219,33 @@ function _rebuildPickers() {
     popSel('ordC', unencCat, 'Select column...');
     popSel('tgtC', allCols, 'Select target...');
     popSel('sampT', catCols, 'Select target column...');
+}
+
+/* Build the missing-value picker — shows only null columns or a clean message */
+function _buildMissingPicker(pickerId, nullCols, type) {
+    var el = document.getElementById('pk-' + pickerId);
+    var ctrlDiv = document.getElementById(pickerId + '-controls');
+
+    if (!nullCols || nullCols.length === 0) {
+        /* No nulls — show green success message, hide entire controls section */
+        if (el) {
+            el.innerHTML =
+                '<div style="padding:14px 16px;background:#f0fdf4;border:1.5px solid #bbf7d0;' +
+                'border-radius:8px;display:flex;align-items:center;gap:10px;">' +
+                '<span style="font-size:20px">\u2705</span>' +
+                '<div><div style="font-size:13px;font-weight:700;color:#166534">No null values found</div>' +
+                '<div style="font-size:11px;color:#15803d;margin-top:2px">' +
+                (type === 'num' ? 'All numerical' : 'All categorical') +
+                ' columns are complete \u2014 nothing to fix</div></div></div>';
+        }
+        /* Hide fill method + apply button completely */
+        if (ctrlDiv) ctrlDiv.style.display = 'none';
+        return;
+    }
+
+    /* Has nulls — build normal picker and show the controls */
+    buildPicker(pickerId, nullCols, type);
+    if (ctrlDiv) ctrlDiv.style.display = '';
 }
 
 async function loadHist() {
@@ -259,11 +292,26 @@ async function loadMissing() {
         document.getElementById('mv-r').textContent = d.total_rows || '-';
         document.getElementById('mv-c').textContent = (d.columns || []).filter(function (c) { return c.null_count > 0; }).length;
         var tb = document.getElementById('mvB');
-        if (!d.columns || !d.columns.length) { tb.innerHTML = '<tr><td colspan="5" style="padding:12px;text-align:center;color:#94a3b8">No columns</td></tr>'; return; }
+        if (!d.columns || !d.columns.length) {
+            tb.innerHTML = '<tr><td colspan="5" style="padding:12px;text-align:center;color:#94a3b8">No columns</td></tr>';
+            return;
+        }
         tb.innerHTML = d.columns.map(function (c) {
             var lv = c.null_percentage > 50 ? ['br', 'High'] : c.null_percentage > 20 ? ['by', 'Med'] : c.null_percentage > 0 ? ['bgr', 'Low'] : ['bg', 'None'];
             return '<tr><td><b>' + c.column + '</b></td><td>' + c.data_type + '</td><td>' + c.null_count + '</td><td>' + c.null_percentage + '%</td><td><span class="b ' + lv[0] + '">' + lv[1] + '</span></td></tr>';
         }).join('');
+
+        /* ── Update null-column lists for the pickers ── */
+        var nullCols = (d.columns || []).filter(function (c) { return c.null_count > 0; });
+        numColsWithNull = nullCols
+            .filter(function (c) { return numCols.indexOf(c.column) !== -1; })
+            .map(function (c) { return c.column; });
+        catColsWithNull = nullCols
+            .filter(function (c) { return catCols.indexOf(c.column) !== -1; })
+            .map(function (c) { return c.column; });
+        _buildMissingPicker('numMis', numColsWithNull, 'num');
+        _buildMissingPicker('catMis', catColsWithNull, 'cat');
+
         if ((d.total_null_count || 0) === 0) markDone(1);
     } catch (e) { /* silent */ }
 }
@@ -279,7 +327,8 @@ async function applyNM() {
         await req('POST', '/preprocessing/' + SID + '/missing-values', body);
         toast('Numerical columns updated');
         markDone(1);
-        Promise.all([_refresh(), loadMissing()]);
+        await loadMissing();      // await so pickers update before _refresh
+        _refresh();               // non-blocking stats+history update
     } catch (e) { toast(e.message, 'terr'); }
     finally { setBtnLoading('applyNMBtn', false); }
 }
@@ -295,7 +344,8 @@ async function applyCM() {
         await req('POST', '/preprocessing/' + SID + '/missing-values', body);
         toast('Categorical columns updated');
         markDone(1);
-        Promise.all([_refresh(), loadMissing()]);
+        await loadMissing();      // await so pickers update before _refresh
+        _refresh();               // non-blocking stats+history update
     } catch (e) { toast(e.message, 'terr'); }
     finally { setBtnLoading('applyCMBtn', false); }
 }
@@ -442,15 +492,42 @@ async function applyTarget() {
 }
 
 /* ── SCALING ─────────────────────────────────── */
+function _updateScalingUI() {
+    /* Columns that still haven't been scaled */
+    var unscaled = numCols.filter(function (c) { return !scaledCols.has(c); });
+    var ctrl = document.getElementById('scale-controls');
+    var done = document.getElementById('scale-done');
+
+    if (unscaled.length === 0 && numCols.length > 0) {
+        /* Every column is scaled — show done panel */
+        if (ctrl) ctrl.style.display = 'none';
+        if (done) done.style.display = '';
+    } else {
+        /* Rebuild picker with only remaining unscaled columns */
+        buildPicker('scale', unscaled.length > 0 ? unscaled : numCols, 'num');
+        if (ctrl) ctrl.style.display = '';
+        if (done) done.style.display = 'none';
+    }
+}
+
 async function applyScaling() {
-    var cols = getPicked('scale'); if (!cols.length) cols = numCols;
-    if (!cols.length) { toast('No numerical columns', 'terr'); return; }
+    /* Only offer unscaled columns; fall back to all if nothing selected */
+    var unscaled = numCols.filter(function (c) { return !scaledCols.has(c); });
+    var cols = getPicked('scale');
+    if (!cols.length) cols = unscaled;
+    if (!cols.length) { toast('No unscaled numerical columns left', 'terr'); return; }
     var m = (document.querySelector('input[name="scM"]:checked') || {}).value || 'standard';
     setBtnLoading('applyScaleBtn', true);
     try {
         await req('POST', '/preprocessing/' + SID + '/scaling', { columns: cols, method: m });
-        toast(m + ' scaling applied on ' + cols.length + ' cols');
-        markDone(5); _refresh();
+        toast(m + ' scaling applied on ' + cols.length + ' col' + (cols.length > 1 ? 's' : ''));
+        markDone(5);
+        /* Track scaled columns; clear redo stack (new action invalidates redo history) */
+        cols.forEach(function (c) { scaledCols.add(c); });
+        _scalingStack.push(cols.slice());
+        _scalingRedoStack = [];
+        _updateScalingUI();
+        _refresh();
     } catch (e) { toast(e.message, 'terr'); }
     finally { setBtnLoading('applyScaleBtn', false); }
 }
@@ -505,12 +582,50 @@ async function applySamp() {
 
 /* ── UNDO / REDO / RESET ─────────────────────── */
 async function undoA() {
-    try { await req('POST', '/preprocessing/' + SID + '/undo'); toast('Undone', 'tinf'); _refresh(); }
-    catch (e) { toast('Nothing to undo', 'terr'); }
+    try {
+        /* Peek at history BEFORE undo so we know what's being undone */
+        var histBefore = await req('GET', '/preprocessing/' + SID + '/history').catch(function () { return []; });
+        var lastEntry = histBefore.length > 0 ? histBefore[histBefore.length - 1] : null;
+        var isScaling = lastEntry && lastEntry.description &&
+            lastEntry.description.toLowerCase().indexOf('scal') !== -1;
+
+        await req('POST', '/preprocessing/' + SID + '/undo');
+        toast('Undone', 'tinf');
+
+        if (isScaling && _scalingStack.length > 0) {
+            var batch = _scalingStack.pop();
+            _scalingRedoStack.push(batch);          // save for possible redo
+            batch.forEach(function (c) { scaledCols.delete(c); });
+        }
+        _updateScalingUI();
+        await loadMissing();
+        _refresh();
+    } catch (e) { toast('Nothing to undo', 'terr'); }
 }
 async function redoA() {
-    try { await req('POST', '/preprocessing/' + SID + '/redo'); toast('Redone', 'tinf'); _refresh(); }
-    catch (e) { toast('Nothing to redo', 'terr'); }
+    try {
+        /* Record history length before redo to detect what was added */
+        var histBefore = await req('GET', '/preprocessing/' + SID + '/history').catch(function () { return []; });
+        var szBefore = histBefore.length;
+
+        await req('POST', '/preprocessing/' + SID + '/redo');
+        toast('Redone', 'tinf');
+
+        var histAfter = await req('GET', '/preprocessing/' + SID + '/history').catch(function () { return []; });
+        if (histAfter.length > szBefore) {
+            var redone = histAfter[histAfter.length - 1];
+            if (redone && redone.description &&
+                redone.description.toLowerCase().indexOf('scal') !== -1 &&
+                _scalingRedoStack.length > 0) {
+                var batch = _scalingRedoStack.pop();
+                _scalingStack.push(batch);
+                batch.forEach(function (c) { scaledCols.add(c); });
+            }
+        }
+        _updateScalingUI();
+        await loadMissing();
+        _refresh();
+    } catch (e) { toast('Nothing to redo', 'terr'); }
 }
 async function resetA() {
     if (!confirm('Reset to original dataset? All changes will be lost.')) return;
@@ -518,6 +633,11 @@ async function resetA() {
         await req('POST', '/preprocessing/' + SID + '/reset');
         toast('Reset done', 'tinf');
         encodedCols.clear();
+        /* Clear all scaling tracking */
+        scaledCols.clear();
+        _scalingStack = [];
+        _scalingRedoStack = [];
+        _updateScalingUI();
         document.querySelectorAll('.nav-btn').forEach(function (b) { b.classList.remove('done'); });
         Promise.all([loadStats(true), loadCols()]).then(function () { loadMissing(); loadHist(); });
     } catch (e) { toast(e.message, 'terr'); }

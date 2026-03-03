@@ -1,7 +1,29 @@
 import pandas as pd
 import numpy as np
+import math
 from typing import Dict, List, Optional
 from .data_service import DataService
+
+
+def _safe_float(value, default=0.0):
+    """Convert to float, returning `default` for NaN / Inf values."""
+    try:
+        v = float(value)
+        return default if (math.isnan(v) or math.isinf(v)) else v
+    except Exception:
+        return default
+
+
+def _safe_list(lst):
+    """Convert a list to JSON-safe values: NaN/Inf → None."""
+    result = []
+    for v in lst:
+        try:
+            fv = float(v)
+            result.append(None if (math.isnan(fv) or math.isinf(fv)) else fv)
+        except (TypeError, ValueError):
+            result.append(v)  # string / None — keep as-is
+    return result
 
 class EDAService:
     """
@@ -57,25 +79,25 @@ class EDAService:
         """Get numerical statistics including skewness and kurtosis"""
         stats_list = []
         describe_df = df.describe()
-        
+
         for col in df.columns:
             col_data = df[col].dropna()
             if len(col_data) > 0:
                 stats_list.append({
                     "column": col,
-                    "count": float(describe_df.loc['count', col]),
-                    "mean": float(describe_df.loc['mean', col]),
-                    "median": float(col_data.median()),
-                    "std": float(describe_df.loc['std', col]),
-                    "min": float(describe_df.loc['min', col]),
-                    "max": float(describe_df.loc['max', col]),
-                    "q25": float(describe_df.loc['25%', col]),
-                    "q50": float(describe_df.loc['50%', col]),
-                    "q75": float(describe_df.loc['75%', col]),
-                    "skewness": float(col_data.skew()) if len(col_data) > 2 else 0.0,
-                    "kurtosis": float(col_data.kurtosis()) if len(col_data) > 2 else 0.0
+                    "count":    _safe_float(describe_df.loc['count', col]),
+                    "mean":     _safe_float(describe_df.loc['mean',  col]),
+                    "median":   _safe_float(col_data.median()),
+                    "std":      _safe_float(describe_df.loc['std',   col]),
+                    "min":      _safe_float(describe_df.loc['min',   col]),
+                    "max":      _safe_float(describe_df.loc['max',   col]),
+                    "q25":      _safe_float(describe_df.loc['25%',   col]),
+                    "q50":      _safe_float(describe_df.loc['50%',   col]),
+                    "q75":      _safe_float(describe_df.loc['75%',   col]),
+                    "skewness": _safe_float(col_data.skew())     if len(col_data) > 2 else 0.0,
+                    "kurtosis": _safe_float(col_data.kurtosis()) if len(col_data) > 2 else 0.0,
                 })
-        
+
         return stats_list
 
     def _get_categorical_stats(self, df: pd.DataFrame) -> List[Dict]:
@@ -149,30 +171,30 @@ class EDAService:
         df = self.data_service.get_data(session_id)
         if column not in df.columns:
             raise ValueError(f"Column '{column}' not found")
-        
+
         col_data = df[column].dropna()
         return {
             "column": column,
-            "data": col_data.tolist(),
-            "dtype": str(df[column].dtype)
+            "data":   _safe_list(col_data.tolist()),
+            "dtype":  str(df[column].dtype)
         }
 
     def get_bivariate_data(self, session_id: str, x_col: str, y_col: str, hue_col: Optional[str] = None) -> Dict:
         """Get data for bivariate/multivariate plotting"""
         df = self.data_service.get_data(session_id)
-        
+
         result = {
             "x_column": x_col,
             "y_column": y_col,
-            "x_data": df[x_col].dropna().tolist(),
-            "y_data": df[y_col].dropna().tolist(),
-            "x_dtype": str(df[x_col].dtype),
-            "y_dtype": str(df[y_col].dtype)
+            "x_data":   _safe_list(df[x_col].tolist()),
+            "y_data":   _safe_list(df[y_col].tolist()),
+            "x_dtype":  str(df[x_col].dtype),
+            "y_dtype":  str(df[y_col].dtype)
         }
-        
+
         if hue_col and hue_col in df.columns:
             result["hue_column"] = hue_col
-            result["hue_data"] = df[hue_col].tolist()
-            result["hue_dtype"] = str(df[hue_col].dtype)
-        
+            result["hue_data"]   = _safe_list(df[hue_col].tolist())
+            result["hue_dtype"]  = str(df[hue_col].dtype)
+
         return result

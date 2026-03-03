@@ -866,23 +866,26 @@
             <div class="card-h">Fix Numerical Columns</div>
             <span style="font-size:11px;color:#94a3b8">numbers only</span>
           </div>
-          <div class="card-sub">Leave all unchecked to apply to every numerical column</div>
+          <div class="card-sub">Only columns with missing values are shown below</div>
           <div id="pk-numMis" class="cpicker"></div>
-          <hr>
-          <div class="rl">Fill Method</div>
-          <div class="opt-row" id="og-numMis">
-            <label class="opt-c" onclick="optPick(this,'og-numMis')"><input type="radio" name="nMis" value="mean"><span
-                class="oc-l">Mean</span><span class="oc-h">Column average</span></label>
-            <label class="opt-c" onclick="optPick(this,'og-numMis')"><input type="radio" name="nMis"
-                value="median"><span class="oc-l">Median</span><span class="oc-h">Safe for skewed data</span></label>
-            <label class="opt-c" onclick="optPick(this,'og-numMis')"><input type="radio" name="nMis"
-                value="constant_num"><span class="oc-l">Number: <input type="number" class="oc-inp" id="cNum" value="0"
-                  onclick="event.stopPropagation()"></span><span class="oc-h">Custom fill value</span></label>
-            <label class="opt-c danger" onclick="optPick(this,'og-numMis')"><input type="radio" name="nMis"
-                value="drop"><span class="oc-l">Drop Rows</span><span class="oc-h">Removes rows
-                permanently</span></label>
+          <div id="numMis-controls">
+            <hr>
+            <div class="rl">Fill Method</div>
+            <div class="opt-row" id="og-numMis">
+              <label class="opt-c" onclick="optPick(this,'og-numMis')"><input type="radio" name="nMis"
+                  value="mean"><span class="oc-l">Mean</span><span class="oc-h">Column average</span></label>
+              <label class="opt-c" onclick="optPick(this,'og-numMis')"><input type="radio" name="nMis"
+                  value="median"><span class="oc-l">Median</span><span class="oc-h">Safe for skewed data</span></label>
+              <label class="opt-c" onclick="optPick(this,'og-numMis')"><input type="radio" name="nMis"
+                  value="constant_num"><span class="oc-l">Number: <input type="number" class="oc-inp" id="cNum"
+                    value="0" onclick="event.stopPropagation()"></span><span class="oc-h">Custom fill
+                  value</span></label>
+              <label class="opt-c danger" onclick="optPick(this,'og-numMis')"><input type="radio" name="nMis"
+                  value="drop"><span class="oc-l">Drop Rows</span><span class="oc-h">Removes rows
+                  permanently</span></label>
+            </div>
+            <button class="btn btn-i" id="applyNMBtn" onclick="applyNM()">Apply to Numerical Columns</button>
           </div>
-          <button class="btn btn-i" id="applyNMBtn" onclick="applyNM()">Apply to Numerical Columns</button>
         </div>
 
         <div class="card">
@@ -890,24 +893,26 @@
             <div class="card-h">Fix Categorical Columns</div>
             <span style="font-size:11px;color:#94a3b8">text / categories</span>
           </div>
-          <div class="card-sub">Leave all unchecked to apply to every categorical column</div>
+          <div class="card-sub">Only columns with missing values are shown below</div>
           <div id="pk-catMis" class="cpicker"></div>
-          <hr>
-          <div class="rl">Fill Method</div>
-          <div class="opt-row" id="og-catMis">
-            <label class="opt-c" onclick="optPick(this,'og-catMis')"><input type="radio" name="cMis" value="mode"><span
-                class="oc-l">Mode</span><span class="oc-h">Most common value</span></label>
-            <label class="opt-c" onclick="optPick(this,'og-catMis')"><input type="radio" name="cMis"
-                value="constant_cat"><span class="oc-l">Custom: <input type="text" class="oc-inp" id="cCat"
-                  value="Unknown" onclick="event.stopPropagation()"></span><span class="oc-h">Your chosen
-                text</span></label>
-            <label class="opt-c danger" onclick="optPick(this,'og-catMis')"><input type="radio" name="cMis"
-                value="drop"><span class="oc-l">Drop Rows</span><span class="oc-h">Removes rows
-                permanently</span></label>
+          <div id="catMis-controls">
+            <hr>
+            <div class="rl">Fill Method</div>
+            <div class="opt-row" id="og-catMis">
+              <label class="opt-c" onclick="optPick(this,'og-catMis')"><input type="radio" name="cMis"
+                  value="mode"><span class="oc-l">Mode</span><span class="oc-h">Most common value</span></label>
+              <label class="opt-c" onclick="optPick(this,'og-catMis')"><input type="radio" name="cMis"
+                  value="constant_cat"><span class="oc-l">Custom: <input type="text" class="oc-inp" id="cCat"
+                    value="Unknown" onclick="event.stopPropagation()"></span><span class="oc-h">Your chosen
+                  text</span></label>
+              <label class="opt-c danger" onclick="optPick(this,'og-catMis')"><input type="radio" name="cMis"
+                  value="drop"><span class="oc-l">Drop Rows</span><span class="oc-h">Removes rows
+                  permanently</span></label>
+            </div>
+            <button class="btn" id="applyCMBtn" style="background:#f59e0b;color:#fff;margin-top:8px"
+              onclick="applyCM()">Apply to
+              Categorical Columns</button>
           </div>
-          <button class="btn" id="applyCMBtn" style="background:#f59e0b;color:#fff;margin-top:8px"
-            onclick="applyCM()">Apply to
-            Categorical Columns</button>
         </div>
       </div>
 
@@ -1024,19 +1029,37 @@
             <button class="info-link" onclick="showInfo('scaling')">What is this?</button>
           </div>
           <div class="card-sub">Puts all numbers on the same scale. Required for KNN, SVM, Neural Networks.</div>
-          <div class="rl">Method</div>
-          <div class="opt-row" id="og-scaler" style="margin-bottom:12px">
-            <label class="opt-c on" onclick="optPick(this,'og-scaler')"><input type="radio" name="scM" value="standard"
-                checked><span class="oc-l">Standard</span><span class="oc-h">Mean=0, Std=1</span></label>
-            <label class="opt-c" onclick="optPick(this,'og-scaler')"><input type="radio" name="scM" value="minmax"><span
-                class="oc-l">Min-Max</span><span class="oc-h">Scales to 0-1</span></label>
-            <label class="opt-c" onclick="optPick(this,'og-scaler')"><input type="radio" name="scM" value="robust"><span
-                class="oc-l">Robust</span><span class="oc-h">Best for outliers</span></label>
+
+          <!-- Shown when scaling NOT yet applied -->
+          <div id="scale-controls">
+            <div class="rl">Method</div>
+            <div class="opt-row" id="og-scaler" style="margin-bottom:12px">
+              <label class="opt-c on" onclick="optPick(this,'og-scaler')"><input type="radio" name="scM"
+                  value="standard" checked><span class="oc-l">Standard</span><span class="oc-h">Mean=0,
+                  Std=1</span></label>
+              <label class="opt-c" onclick="optPick(this,'og-scaler')"><input type="radio" name="scM"
+                  value="minmax"><span class="oc-l">Min-Max</span><span class="oc-h">Scales to 0-1</span></label>
+              <label class="opt-c" onclick="optPick(this,'og-scaler')"><input type="radio" name="scM"
+                  value="robust"><span class="oc-l">Robust</span><span class="oc-h">Best for outliers</span></label>
+            </div>
+            <div class="rl">Numerical Columns <span style="text-transform:none;font-weight:400;color:#94a3b8">(leave
+                unchecked = apply to all)</span></div>
+            <div id="pk-scale" class="cpicker"></div>
+            <button class="btn btn-i" id="applyScaleBtn" onclick="applyScaling()">Apply Scaling</button>
           </div>
-          <div class="rl">Numerical Columns <span style="text-transform:none;font-weight:400;color:#94a3b8">(leave
-              unchecked = apply to all)</span></div>
-          <div id="pk-scale" class="cpicker"></div>
-          <button class="btn btn-i" id="applyScaleBtn" onclick="applyScaling()">Apply Scaling</button>
+
+          <!-- Shown AFTER scaling is applied -->
+          <div id="scale-done" style="display:none;margin-top:4px">
+            <div
+              style="padding:14px 16px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;display:flex;align-items:center;gap:12px">
+              <span style="font-size:22px">&#x2705;</span>
+              <div>
+                <div style="font-size:13px;font-weight:700;color:#166534">Scaling Applied</div>
+                <div style="font-size:11px;color:#15803d;margin-top:2px">Columns have been scaled &mdash; applying again
+                  would compound the effect. Use <b>Undo</b> to revert.</div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
