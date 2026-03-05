@@ -39,7 +39,10 @@ class PreprocessingEngine:
             self.sm  = ScalerManager()
             self.oh  = OutlierHandler()
             self.sh  = SamplingHandler()
-            self.cr  = ColumnRegistry()   # ← new global column registry
+            self.cr  = ColumnRegistry()   # ← global column registry
+            # Wire registry into DatasetManager so commit/undo/redo can
+            # snapshot and restore encoding roles atomically with the DataFrame
+            self.dm._cr = self.cr
             self._ready = True
 
     # ── Helpers ──────────────────────────────────────────────────────────
@@ -68,6 +71,32 @@ class PreprocessingEngine:
 
     def get_action_history(self, sid: str) -> List[Dict]:
         return self.dm.get_log(sid)
+
+    def quick_summary(self, sid: str) -> Dict:
+        """
+        Single fast pass over the current DataFrame to compute everything
+        needed for the three topbar badges (nulls, duplicates, constant cols).
+        One DataFrame read, all vectorised — no repeated disk I/O.
+        """
+        df = self._cur(sid)
+
+        # ── Missing values ────────────────────────────────────────────────
+        total_nulls = int(df.isnull().sum().sum())
+
+        # ── Duplicates ────────────────────────────────────────────────────
+        # rows_to_remove = rows actually deleted by drop_duplicates(keep='first')
+        rows_to_remove = int(df.duplicated(keep='first').sum())
+
+        # ── Constant columns ──────────────────────────────────────────────
+        # A column is constant when it has <= 1 unique non-null value
+        unique_counts = df.nunique()
+        constant_col_count = int((unique_counts <= 1).sum())
+
+        return {
+            'total_nulls':      total_nulls,
+            'rows_to_remove':   rows_to_remove,
+            'constant_columns': constant_col_count,
+        }
 
     def get_current_dataset(self, sid: str) -> pd.DataFrame:
         return self._cur(sid)

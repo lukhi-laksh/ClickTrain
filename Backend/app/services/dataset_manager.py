@@ -1,9 +1,10 @@
 """
 DatasetManager: Fast, in-memory only. No disk I/O during preprocessing.
-Versions are stored as column-level deltas, not full copies.
+Undo/redo stacks store (DataFrame, registry_snapshot, log_entry) tuples
+so that the ColumnRegistry is fully reverted alongside the data.
 """
+import copy
 import pandas as pd
-import numpy as np
 from typing import Dict, Optional
 from datetime import datetime
 
@@ -12,6 +13,11 @@ class DatasetManager:
     """
     Singleton in-memory dataset manager with undo/redo.
     FAST: no disk I/O on every operation, minimal copying.
+
+    Each undo/redo stack entry is a 3-tuple:
+        (DataFrame, registry_dict_snapshot, log_entry_dict)
+    This ensures that encoding roles (ColumnRegistry) and history are
+    ALL reverted/re-applied together when the user presses Undo or Redo.
     """
 
     _instance = None
@@ -28,8 +34,8 @@ class DatasetManager:
             self._original: Dict[str, pd.DataFrame] = {}
             self._current:  Dict[str, pd.DataFrame] = {}
 
-            # undo/redo stacks hold DataFrames (shallow references where possible)
-            # {session_id: [df, df, ...]}
+            # undo/redo stacks hold (DataFrame, registry_snapshot, log_entry)
+            # {session_id: [(df, reg_snap, entry), ...]}
             self._undo: Dict[str, list] = {}
             self._redo: Dict[str, list] = {}
 
@@ -38,6 +44,9 @@ class DatasetManager:
 
             # audit log  {session_id: [{description, timestamp}, ...]}
             self._log: Dict[str, list] = {}
+
+            # Reference to ColumnRegistry — wired in by PreprocessingEngine
+            self._cr = None
 
             DatasetManager._initialized = True
 
@@ -67,36 +76,89 @@ class DatasetManager:
             raise ValueError(f'Session {session_id} not found.')
         return self._original[session_id]
 
+    # ── Registry snapshot helpers ────────────────────────
+    def _snap_registry(self, session_id: str) -> Optional[dict]:
+        """Take a deep copy of the current registry state for this session."""
+        if self._cr is None:
+            return None
+        reg = self._cr._registry.get(session_id)
+        return copy.deepcopy(reg) if reg is not None else None
+
+    def _restore_registry(self, session_id: str, snapshot: Optional[dict]):
+        """Restore a previously snapshotted registry state."""
+        if self._cr is None or snapshot is None:
+            return
+        self._cr._registry[session_id] = snapshot
+
     # ── Commit a new version (push old to undo stack) ───
     def commit(self, session_id: str, new_df: pd.DataFrame, description: str):
         if session_id not in self._current:
             raise ValueError(f'Session {session_id} not found.')
-        # Push old state to undo stack
-        self._undo[session_id].append(self._current[session_id])
-        # Clear redo (new branch)
-        self._redo[session_id].clear()
-        # Replace current
-        self._current[session_id] = new_df
-        # Log
-        self._log[session_id].append({
+
+        # Snapshot current registry state BEFORE we modify anything
+        reg_snap = self._snap_registry(session_id)
+        log_entry = {
             'description': description,
             'timestamp':   datetime.now().isoformat(),
-        })
+        }
+
+        # Push (old_df, old_registry, new_log_entry) onto undo stack
+        self._undo[session_id].append(
+            (self._current[session_id], reg_snap, log_entry)
+        )
+        # Clear redo (new action invalidates redo history)
+        self._redo[session_id].clear()
+        # Replace current dataframe
+        self._current[session_id] = new_df
+        # Append to visible log
+        self._log[session_id].append(log_entry)
 
     # ── Undo / Redo ──────────────────────────────────────
     def undo(self, session_id: str):
         if session_id not in self._undo or not self._undo[session_id]:
             raise ValueError('Nothing to undo.')
-        self._redo[session_id].append(self._current[session_id])
-        self._current[session_id] = self._undo[session_id].pop()
+
+        # Capture current state to push onto redo stack
+        cur_reg_snap  = self._snap_registry(session_id)
+        cur_log_entry = self._log[session_id][-1] if self._log[session_id] else None
+
+        self._redo[session_id].append(
+            (self._current[session_id], cur_reg_snap, cur_log_entry)
+        )
+
+        # Pop previous state
+        prev_df, prev_reg, _ = self._undo[session_id].pop()
+
+        # Restore DataFrame + registry to previous state
+        self._current[session_id] = prev_df
+        self._restore_registry(session_id, prev_reg)
+
+        # Remove last log entry
         if self._log[session_id]:
             self._log[session_id].pop()
 
     def redo(self, session_id: str):
         if session_id not in self._redo or not self._redo[session_id]:
             raise ValueError('Nothing to redo.')
-        self._undo[session_id].append(self._current[session_id])
-        self._current[session_id] = self._redo[session_id].pop()
+
+        # Capture current state to push onto undo stack
+        cur_reg_snap  = self._snap_registry(session_id)
+        cur_log_entry = self._log[session_id][-1] if self._log[session_id] else None
+
+        self._undo[session_id].append(
+            (self._current[session_id], cur_reg_snap, cur_log_entry)
+        )
+
+        # Pop the redo state
+        next_df, next_reg, next_log = self._redo[session_id].pop()
+
+        # Restore DataFrame + registry
+        self._current[session_id] = next_df
+        self._restore_registry(session_id, next_reg)
+
+        # Restore the log entry that was undone
+        if next_log:
+            self._log[session_id].append(next_log)
 
     # ── Reset ────────────────────────────────────────────
     def reset(self, session_id: str):

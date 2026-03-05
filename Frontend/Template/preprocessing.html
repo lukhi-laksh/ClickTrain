@@ -656,8 +656,7 @@
     .tbar {
       display: flex;
       border-bottom: 2px solid #e2e8f0;
-      margin-bottom: 12px;
-      overflow-x: auto
+      margin-bottom: 12px
     }
 
     .tab {
@@ -769,20 +768,45 @@
   <!-- Top bar -->
   <div class="topbar">
     <div
-      style="max-width:1280px;margin:0 auto;padding:8px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-      <div style="display:flex;align-items:center;gap:10px">
-        <button id="menuBtn" onclick="toggleSB()" style="display:none" class="btn-sm">Menu</button>
-        <div>
-          <div style="font-size:14px;font-weight:700" id="dsN">Loading...</div>
+      style="max-width:1280px;margin:0 auto;padding:0 14px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;min-height:52px;gap:8px">
+
+      <!-- LEFT: dataset name + shape -->
+      <div style="display:flex;align-items:center;gap:8px;min-width:0">
+        <button id="menuBtn" onclick="toggleSB()" style="display:none" class="btn-sm">☰</button>
+        <div style="min-width:0">
+          <div style="font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
+            id="dsN">Loading...</div>
           <div style="font-size:11px;color:#94a3b8" id="dsS">&nbsp;</div>
         </div>
       </div>
-      <div style="display:flex;gap:6px">
+
+      <!-- CENTER: three data-quality badges, always visible -->
+      <div style="display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:wrap" id="issueBadges">
+        <div id="badge-nulls" onclick="go('missing')" title="Null values — click to fix" style="cursor:pointer;padding:4px 11px;border-radius:20px;font-size:11px;font-weight:700;
+                 border:1.5px solid #e2e8f0;background:#f8fafc;color:#94a3b8;white-space:nowrap;
+                 transition:background .2s,color .2s,border-color .2s">
+          · · ·
+        </div>
+        <div id="badge-dups" onclick="go('duplicates')" title="Duplicate rows — click to fix" style="cursor:pointer;padding:4px 11px;border-radius:20px;font-size:11px;font-weight:700;
+                 border:1.5px solid #e2e8f0;background:#f8fafc;color:#94a3b8;white-space:nowrap;
+                 transition:background .2s,color .2s,border-color .2s">
+          · · ·
+        </div>
+        <div id="badge-const" onclick="go('constant')" title="Constant columns — click to fix" style="cursor:pointer;padding:4px 11px;border-radius:20px;font-size:11px;font-weight:700;
+                 border:1.5px solid #e2e8f0;background:#f8fafc;color:#94a3b8;white-space:nowrap;
+                 transition:background .2s,color .2s,border-color .2s">
+          · · ·
+        </div>
+      </div>
+
+      <!-- RIGHT: undo / redo / reset -->
+      <div style="display:flex;gap:6px;justify-content:flex-end">
         <button id="undoB" onclick="undoA()" disabled class="btn-sm">Undo</button>
         <button id="redoB" onclick="redoA()" disabled class="btn-sm">Redo</button>
         <button onclick="resetA()" class="btn-sm"
           style="border-color:#fca5a5;color:#dc2626;background:#fff1f2">Reset</button>
       </div>
+
     </div>
   </div>
 
@@ -919,25 +943,36 @@
       <!-- 2. DUPLICATES -->
       <div id="sec-duplicates" class="sec" style="display:none">
         <div class="card">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <!-- Compact header row with inline stats -->
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
             <div class="card-h">Duplicate Rows</div>
             <button class="info-link" onclick="showInfo('duplicates')">What is this?</button>
           </div>
-          <div class="stats-row">
-            <div class="stat-b">
-              <div class="stat-v" id="d-c">-</div>
-              <div class="stat-l">Duplicates</div>
+          <!-- Compact inline stats (no large tiles) -->
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+            <div
+              style="background:#fff1f2;border:1.5px solid #fca5a5;border-radius:7px;padding:6px 12px;display:flex;align-items:center;gap:8px">
+              <span style="font-size:18px;font-weight:700;color:#be123c" id="d-c">-</span>
+              <span
+                style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#be123c">Rows
+                to Remove</span>
             </div>
-            <div class="stat-b">
-              <div class="stat-v" id="d-u">-</div>
-              <div class="stat-l">Unique Rows</div>
+            <div
+              style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:7px;padding:6px 12px;display:flex;align-items:center;gap:8px">
+              <span style="font-size:18px;font-weight:700;color:#166534" id="d-u">-</span>
+              <span
+                style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#166534">Rows
+                After Removal</span>
             </div>
-            <div class="stat-b">
-              <div class="stat-v" id="d-p">-</div>
-              <div class="stat-l">% Duplicate</div>
+            <div
+              style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:7px;padding:6px 12px;display:flex;align-items:center;gap:8px">
+              <span style="font-size:18px;font-weight:700;color:#475569" id="d-p">-</span>
+              <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b">%
+                To Remove</span>
             </div>
           </div>
-          <div id="d-prev" style="overflow-x:auto;font-size:12px;margin-bottom:10px"></div>
+          <!-- Preview + summary area -->
+          <div id="d-prev" style="font-size:12px;margin-bottom:10px"></div>
           <hr>
           <div style="font-size:12px;color:#64748b;margin-bottom:6px">Which copy to keep when duplicates are found?
           </div>
@@ -1179,7 +1214,7 @@
     </main>
   </div>
 
-  <script src="preprocessing_script.js"></script>
+  <script src="preprocessing_script.js?v=3"></script>
   <script src="header.js"></script>
 </body>
 

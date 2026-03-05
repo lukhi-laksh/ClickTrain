@@ -354,6 +354,24 @@ async def apply_sampling(session_id: str, req: SamplingRequest):
         raise HTTPException(500, detail=f"Failed to apply sampling: {e}")
 
 
+# ==================== Quick Summary (topbar badges) ====================
+
+@router.get("/preprocessing/{session_id}/quick-summary")
+async def get_quick_summary(session_id: str):
+    """
+    Single fast call that returns all three badge values:
+      - total_nulls         (for the Null badge)
+      - rows_to_remove      (duplicate rows that will actually be deleted)
+      - constant_columns    (number of constant cols detected)
+    """
+    try:
+        return preprocessing_engine.quick_summary(session_id)
+    except ValueError as e:
+        raise HTTPException(404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(500, detail=f"Failed to get quick summary: {e}")
+
+
 # ==================== Version Control ====================
 
 @router.get("/preprocessing/{session_id}/stats")

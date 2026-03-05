@@ -1,4 +1,5 @@
-/* preprocessing_script.js - optimized for maximum speed */
+/*  <script src="preprocessing_script.js?v=4"></script>
+imized for maximum speed + live undo/redo/reset */
 var API = 'http://127.0.0.1:8000/api';
 var SID = null;
 var numCols = [], catCols = [], allCols = [];
@@ -10,11 +11,12 @@ var _scalingRedoStack = [];      // redo stack: mirrors undo for redo-of-scaling
 var origShape = null;
 var _plotlyLoaded = false;
 var _pickers = {};
+var _activeSection = 'missing';  // track which section is currently visible
 
 /* ── Info texts ─────────────────────────────── */
 var INFO = {
     missing: { t: 'Missing Values', b: 'Missing values are empty cells. Most ML models fail when they encounter them.<br><br><b>Numerical:</b> Fill with Mean, Median, a custom number, or drop rows with missing data.<br><b>Categorical:</b> Fill with Mode (most common), a custom word, or drop the row.<br><br>If no columns are selected, the operation applies to every column of that type.' },
-    duplicates: { t: 'Duplicate Rows', b: 'Duplicate rows are identical across every column. They add no new information and bias model training.<br><br>You can keep the first occurrence or the last one when removing.' },
+    duplicates: { t: 'Duplicate Rows', b: 'Duplicate rows are identical across every column. They add no new information and bias model training.<br><br>You can keep the first occurrence or the last one when removing.<br><br><b>Note:</b> Some preprocessing steps (like filling nulls with the same value) can <em>create</em> new duplicates — that\'s why the duplicate count updates after every operation.' },
     constant: { t: 'Constant Columns', b: 'A constant column has the same value in every single row (e.g. "Country" = "India" for all 10,000 rows). It provides zero information to a model and wastes memory. Always remove before training.' },
     encoding: { t: 'Categorical Encoding', b: 'ML models only understand numbers. All text/category columns must be converted first.<br><br><b>Label:</b> Red=0, Blue=1, Green=2. Simple, fast. Good for tree-based models.<br><b>One-Hot:</b> Creates a new 0/1 column for each category. Best for unordered text.<br><b>Ordinal:</b> You define the order: Low=0, Medium=1, High=2.<br><b>Target:</b> Replaces each category with the average target value for that group. Powerful but prone to data leakage.' },
     scaling: { t: 'Feature Scaling', b: 'Scaling puts all numerical columns on the same scale so columns with larger numbers do not dominate the model.<br><br><b>Standard:</b> Mean=0, Std=1. Works for most algorithms.<br><b>Min-Max:</b> Values become 0 to 1. Good for bounded features.<br><b>Robust:</b> Based on median, best when data has outliers.<br><br>Required for: KNN, SVM, Neural Networks, PCA.' },
@@ -40,13 +42,21 @@ function go(name) {
     document.querySelectorAll('.sec').forEach(function (s) { s.style.display = 'none'; });
     var el = document.getElementById('sec-' + name); if (el) el.style.display = '';
     document.querySelectorAll('.nav-btn').forEach(function (b) { b.classList.remove('active'); if (b.getAttribute('data-s') === name) b.classList.add('active'); });
+    _activeSection = name;
     closeSB();
     if (name === 'missing') loadMissing();
     else if (name === 'duplicates') loadDups();
     else if (name === 'constant') loadConst();
     else if (name === 'report') loadReport();
 }
-function markDone(n) { var el = document.getElementById('n' + n); if (el) { el.textContent = 'ok'; el.parentElement.classList.add('done'); } }
+function markDone(n) {
+    var el = document.getElementById('n' + n);
+    if (el) { el.textContent = '\u2713'; el.parentElement.classList.add('done'); }
+}
+function markUndone(n) {
+    var el = document.getElementById('n' + n);
+    if (el) { el.textContent = n; el.parentElement.classList.remove('done'); }
+}
 
 /* ── Option card toggle (radio visual) ───────── */
 function optPick(card, groupId) {
@@ -174,6 +184,7 @@ document.addEventListener('DOMContentLoaded', function () {
     Promise.all([loadStats(true), loadCols()]).then(function () {
         loadMissing();
         loadHist(); // load history once, separately
+        _refreshBadges(); // initial three-badge load
     });
 });
 
@@ -219,6 +230,38 @@ function _rebuildPickers() {
     popSel('ordC', unencCat, 'Select column...');
     popSel('tgtC', allCols, 'Select target...');
     popSel('sampT', catCols, 'Select target column...');
+}
+
+/* ── Sync encoded-column state from backend ─────────────────────────────────
+   After undo/redo/reset the backend DataFrame is in a new state.
+   The safest way to re-derive which columns are encoded is:
+     1. Clear encodedCols (we don’t know what changed)
+     2. Re-fetch column lists from the live DataFrame via loadCols()
+        — columns that were label/ordinal encoded are now int64 so they
+          appear in numCols, not catCols; after undo they are object again
+          and re-appear in catCols automatically.
+     3. Use the backend’s /encodable-columns list to mark any catCols that
+        are STILL encoded (e.g. after partial undo) back into encodedCols.
+   This is called exclusively from _fullRefresh() after undo/redo/reset.   */
+async function _syncEncodedCols() {
+    try {
+        /* First: reload column lists so catCols reflects the current df dtypes */
+        await loadCols();
+        /* Second: ask backend which catCols are still original_categorical         */
+        var d = await req('GET', '/preprocessing/' + SID + '/encodable-columns');
+        var encodable = new Set(d.encodable_columns || []);
+        /* Any catCol NOT in encodable is still encoded (rare after undo, but safe) */
+        encodedCols.clear();
+        catCols.forEach(function (c) {
+            if (!encodable.has(c)) encodedCols.add(c);
+        });
+        /* Rebuild every picker/dropdown that depends on encodedCols */
+        buildPicker('label', catCols, 'cat', encodedCols);
+        buildPicker('onehot', catCols, 'cat', encodedCols);
+        buildPicker('target', catCols, 'cat', encodedCols);
+        var unenc = catCols.filter(function (c) { return !encodedCols.has(c); });
+        popSel('ordC', unenc, 'Select column...');
+    } catch (e) { /* silent — non-critical */ }
 }
 
 /* Build the missing-value picker — shows only null columns or a clean message */
@@ -269,7 +312,74 @@ async function loadHist() {
     } catch (e) { /* silent */ }
 }
 
-/* ── After-action refresh (stats + history in parallel) ── */
+/* ── Live three-badge refresh ─────────────────────────────────────────
+   Calls three existing endpoints in parallel.
+   Each badge + each sidebar step marker is updated independently.
+   A single API failure can never blank other badges.                 */
+async function _refreshBadges() {
+    var base = '/preprocessing/' + SID;
+
+    /* ── 1. NULLS ── */
+    req('GET', base + '/missing-values').then(function (d) {
+        var n = d.total_null_count || 0;
+        _paintBadge('badge-nulls', n === 0, 'Nulls: 0', 'Nulls: ' + n);
+        /* Step marker: done only when ALL nulls (num + cat) are gone */
+        if (n === 0) markDone(1); else markUndone(1);
+    }).catch(function () { /* badge stays as-is */ });
+
+    /* ── 2. DUPLICATES ── */
+    req('GET', base + '/duplicates').then(function (d) {
+        var remove = (typeof d.rows_to_remove !== 'undefined')
+            ? d.rows_to_remove
+            : Math.floor((d.duplicate_row_count || 0) / 2);
+        _paintBadge('badge-dups', remove === 0,
+            'Duplicates: 0',
+            'Duplicates: ' + remove);
+        if (remove === 0) markDone(2); else markUndone(2);
+    }).catch(function () { /* badge stays as-is */ });
+
+    /* ── 3. CONSTANT COLS ── */
+    req('GET', base + '/constant-columns').then(function (d) {
+        var c = (d.constant_columns || []).length;
+        _paintBadge('badge-const', c === 0,
+            'Constant Cols: 0',
+            'Constant Cols: ' + c);
+        if (c === 0) markDone(3); else markUndone(3);
+    }).catch(function () { /* badge stays as-is */ });
+}
+
+/* Paint a single always-visible pill badge.
+   isClean=true → green background, false → red background. */
+function _paintBadge(id, isClean, labelClean, labelIssue) {
+    var el = document.getElementById(id); if (!el) return;
+    el.textContent = isClean ? labelClean : labelIssue;
+    el.style.fontWeight = '700';
+    el.style.background = isClean ? '#f0fdf4' : '#fff1f2';
+    el.style.color = isClean ? '#166534' : '#be123c';
+    el.style.border = isClean ? '1.5px solid #bbf7d0' : '1.5px solid #fca5a5';
+}
+
+
+/* ── Refresh the currently active section live ── */
+async function _refreshActiveSection() {
+    if (_activeSection === 'missing') {
+        await loadMissing();
+    } else if (_activeSection === 'duplicates') {
+        await loadDups();
+    } else if (_activeSection === 'constant') {
+        await loadConst();
+    } else if (_activeSection === 'report') {
+        await loadReport();
+    }
+    /* For scaling/outliers/sampling, rebuild pickers to reflect new data.
+       Encoding pickers are always rebuilt by _syncEncodedCols() above,
+       so we skip loadCols() for encoding to avoid a redundant double-call. */
+    if (_activeSection === 'scaling' || _activeSection === 'outliers' || _activeSection === 'sampling') {
+        await loadCols();
+    }
+}
+
+/* ── After-action refresh: stats + history + badge + active section ── */
 async function _refresh() {
     return Promise.all([
         req('GET', '/preprocessing/' + SID + '/stats').then(function (d) {
@@ -279,8 +389,21 @@ async function _refresh() {
             document.getElementById('undoB').disabled = !d.can_undo;
             document.getElementById('redoB').disabled = !d.can_redo;
         }).catch(function () { }),
-        loadHist()
+        loadHist(),
+        _refreshBadges()  // always update all three badges after every operation
     ]);
+}
+
+/* ── Full refresh after undo/redo/reset ────────────────────────────────────
+   Clears encodedCols first so stale frontend state can’t bleed through,
+   then re-syncs everything from the backend in the right order.           */
+async function _fullRefresh() {
+    await _refresh();
+    /* Clear stale encoding state before re-syncing */
+    encodedCols.clear();
+    /* Re-sync: reloads catCols from live df, then derives encodedCols */
+    await _syncEncodedCols();
+    await _refreshActiveSection();
 }
 
 /* ── MISSING VALUES ──────────────────────────── */
@@ -291,6 +414,7 @@ async function loadMissing() {
         document.getElementById('mv-p').textContent = (d.total_null_percentage || 0) + '%';
         document.getElementById('mv-r').textContent = d.total_rows || '-';
         document.getElementById('mv-c').textContent = (d.columns || []).filter(function (c) { return c.null_count > 0; }).length;
+
         var tb = document.getElementById('mvB');
         if (!d.columns || !d.columns.length) {
             tb.innerHTML = '<tr><td colspan="5" style="padding:12px;text-align:center;color:#94a3b8">No columns</td></tr>';
@@ -301,14 +425,31 @@ async function loadMissing() {
             return '<tr><td><b>' + c.column + '</b></td><td>' + c.data_type + '</td><td>' + c.null_count + '</td><td>' + c.null_percentage + '%</td><td><span class="b ' + lv[0] + '">' + lv[1] + '</span></td></tr>';
         }).join('');
 
-        /* ── Update null-column lists for the pickers ── */
+        /* ── Classify columns by data_type from the API response directly.
+               This avoids cross-contamination from the separately-loaded
+               numCols / catCols arrays which may be stale or empty.        */
+        function _isNumType(dtype) {
+            if (!dtype) return false;
+            var t = dtype.toLowerCase();
+            return t.indexOf('int') !== -1 || t.indexOf('float') !== -1 ||
+                t.indexOf('number') !== -1 || t.indexOf('decimal') !== -1 ||
+                t.indexOf('double') !== -1 || t.indexOf('numeric') !== -1;
+        }
+
         var nullCols = (d.columns || []).filter(function (c) { return c.null_count > 0; });
-        numColsWithNull = nullCols
-            .filter(function (c) { return numCols.indexOf(c.column) !== -1; })
+
+        /* Use data_type from the response to split — never touch the other picker */
+        var numWithNull = nullCols
+            .filter(function (c) { return _isNumType(c.data_type); })
             .map(function (c) { return c.column; });
-        catColsWithNull = nullCols
-            .filter(function (c) { return catCols.indexOf(c.column) !== -1; })
+        var catWithNull = nullCols
+            .filter(function (c) { return !_isNumType(c.data_type); })
             .map(function (c) { return c.column; });
+
+        /* Only rebuild pickers that actually changed — keeps other section stable */
+        numColsWithNull = numWithNull;
+        catColsWithNull = catWithNull;
+
         _buildMissingPicker('numMis', numColsWithNull, 'num');
         _buildMissingPicker('catMis', catColsWithNull, 'cat');
 
@@ -316,36 +457,51 @@ async function loadMissing() {
     } catch (e) { /* silent */ }
 }
 
+
 async function applyNM() {
-    var cols = getPicked('numMis');
+    var picked = getPicked('numMis');
     var radio = document.querySelector('input[name="nMis"]:checked');
     if (!radio) { toast('Pick a fill method', 'terr'); return; }
-    var s = radio.value, body = { columns: cols.length ? cols : null, strategy: s };
+
+    /* ALWAYS send explicit column list — never send null/undefined
+       (sending null tells the backend to process ALL column types,
+        which would cross-contaminate categorical columns).          */
+    var targetCols = picked.length ? picked : numColsWithNull;
+    if (!targetCols.length) { toast('No numerical columns with missing values', 'tinf'); return; }
+
+    var s = radio.value;
+    var body = { columns: targetCols, strategy: s };
     if (s === 'constant_num') body.constant_value = parseFloat(document.getElementById('cNum').value) || 0;
+
     setBtnLoading('applyNMBtn', true);
     try {
         await req('POST', '/preprocessing/' + SID + '/missing-values', body);
-        toast('Numerical columns updated');
-        markDone(1);
-        await loadMissing();      // await so pickers update before _refresh
-        _refresh();               // non-blocking stats+history update
+        toast('Numerical columns updated (' + targetCols.length + ' col' + (targetCols.length !== 1 ? 's' : '') + ')');
+        await loadMissing();
+        _refresh();
     } catch (e) { toast(e.message, 'terr'); }
     finally { setBtnLoading('applyNMBtn', false); }
 }
 
 async function applyCM() {
-    var cols = getPicked('catMis');
+    var picked = getPicked('catMis');
     var radio = document.querySelector('input[name="cMis"]:checked');
     if (!radio) { toast('Pick a fill method', 'terr'); return; }
-    var s = radio.value, body = { columns: cols.length ? cols : null, strategy: s };
+
+    /* ALWAYS send explicit column list — never send null/undefined */
+    var targetCols = picked.length ? picked : catColsWithNull;
+    if (!targetCols.length) { toast('No categorical columns with missing values', 'tinf'); return; }
+
+    var s = radio.value;
+    var body = { columns: targetCols, strategy: s };
     if (s === 'constant_cat') body.constant_string = document.getElementById('cCat').value || 'Unknown';
+
     setBtnLoading('applyCMBtn', true);
     try {
         await req('POST', '/preprocessing/' + SID + '/missing-values', body);
-        toast('Categorical columns updated');
-        markDone(1);
-        await loadMissing();      // await so pickers update before _refresh
-        _refresh();               // non-blocking stats+history update
+        toast('Categorical columns updated (' + targetCols.length + ' col' + (targetCols.length !== 1 ? 's' : '') + ')');
+        await loadMissing();
+        _refresh();
     } catch (e) { toast(e.message, 'terr'); }
     finally { setBtnLoading('applyCMBtn', false); }
 }
@@ -354,25 +510,98 @@ async function applyCM() {
 async function loadDups() {
     try {
         var d = await req('GET', '/preprocessing/' + SID + '/duplicates');
-        document.getElementById('d-c').textContent = d.duplicate_row_count || 0;
-        document.getElementById('d-p').textContent = ((d.duplicate_row_count || 0) / Math.max(d.total_rows || 1, 1) * 100).toFixed(1) + '%';
-        document.getElementById('d-u').textContent = (d.total_rows || 0) - (d.duplicate_row_count || 0);
+
+        /*  rows_to_remove = ONLY the extra copies deleted by keep='first'.
+            duplicate_row_count is now also set to this same value in the
+            backend, so both fields are safe fallbacks for each other.    */
+        var toRemove = d.rows_to_remove !== undefined ? d.rows_to_remove
+            : d.duplicate_row_count !== undefined ? d.duplicate_row_count : 0;
+        var totalRows = d.total_rows || 0;
+        var afterDrop = d.unique_rows !== undefined ? d.unique_rows : (totalRows - toRemove);
+
+        /* ── Top stat tiles ── */
+        var elC = document.getElementById('d-c');
+        var elU = document.getElementById('d-u');
+        var elP = document.getElementById('d-p');
+        if (elC) elC.textContent = toRemove;
+        if (elU) elU.textContent = afterDrop;
+        if (elP) elP.textContent = totalRows > 0
+            ? (toRemove / totalRows * 100).toFixed(1) + '%' : '0.0%';
+
         var prev = document.getElementById('d-prev');
-        if (!d.duplicate_row_count) {
-            prev.innerHTML = '<div style="padding:10px;background:#f0fdf4;border-radius:7px;color:#166534;font-size:12px;font-weight:600">No duplicates - your data is clean!</div>';
-            document.getElementById('dupBtn').disabled = true; markDone(2);
-        } else if (d.preview && d.preview.rows && d.preview.rows.length) {
-            var c = d.preview.columns;
-            var h = '<thead><tr>' + c.map(function (x) { return '<th>' + x + '</th>'; }).join('') + '</tr></thead>';
-            var rows = d.preview.rows.slice(0, 5).map(function (row) { return '<tr>' + row.map(function (cell) { return '<td>' + cell + '</td>'; }).join('') + '</tr>'; }).join('');
-            prev.innerHTML = '<div style="overflow-x:auto"><table class="dt">' + h + '<tbody>' + rows + '</tbody></table></div><div style="font-size:10px;color:#94a3b8;margin-top:3px">First 5 duplicate rows</div>';
-            document.getElementById('dupBtn').disabled = false;
-        } else {
-            prev.innerHTML = '<div style="font-size:12px;color:#f59e0b;font-weight:600">' + d.duplicate_row_count + ' duplicates found</div>';
-            document.getElementById('dupBtn').disabled = false;
+        var btn = document.getElementById('dupBtn');
+
+        /* ── CLEAN ── */
+        if (toRemove === 0) {
+            if (prev) prev.innerHTML =
+                '<div style="padding:14px 16px;background:#f0fdf4;border:1.5px solid #bbf7d0;' +
+                'border-radius:10px;display:flex;align-items:center;gap:12px">' +
+                '<span style="font-size:22px">\u2705</span>' +
+                '<div><div style="font-weight:700;color:#166534;font-size:13px">No duplicate rows found</div>' +
+                '<div style="font-size:11px;color:#15803d;margin-top:2px">' +
+                'Your dataset has no repeated rows \u2014 nothing to remove</div></div></div>';
+            if (btn) btn.disabled = true;
+            markDone(2);
+            _refreshBadges();
+            return;
         }
-    } catch (e) { /* silent */ }
+
+        /* ── BUILD HTML ── */
+        var html = '';
+
+        /* 1. Small informational line (no warning colors) */
+        html +=
+            '<div style="font-size:12px;color:#475569;margin-bottom:10px">' +
+            '<b style="color:#be123c">' + toRemove + '</b> duplicate row' +
+            (toRemove !== 1 ? 's' : '') + ' found and will be removed. ' +
+            '<b style="color:#166534">' + afterDrop + '</b> row' +
+            (afterDrop !== 1 ? 's' : '') + ' will remain in your dataset.' +
+            '</div>';
+
+        /* 2. Preview table: ONLY rows being deleted (first occurrence not shown) */
+        if (d.preview && d.preview.rows && d.preview.rows.length) {
+            var totalCount = d.preview.total_to_remove !== undefined
+                ? d.preview.total_to_remove : toRemove;
+            var isCapped = d.preview.preview_capped || (d.preview.rows.length < totalCount);
+            var cols = d.preview.columns || [];
+
+            var caption = isCapped
+                ? 'Rows to be removed (showing ' + d.preview.rows.length + ' of ' + totalCount + ')'
+                : 'Rows to be removed (' + d.preview.rows.length + ')';
+
+            html +=
+                '<div style="font-size:11px;font-weight:600;color:#64748b;margin-bottom:4px">' +
+                caption + '</div>' +
+                '<div style="overflow-x:auto;margin-bottom:10px">' +
+                '<table class="dt"><thead><tr>' +
+                '<th style="color:#94a3b8;font-size:10px;width:24px;text-align:center">#</th>' +
+                cols.map(function (c) { return '<th>' + c + '</th>'; }).join('') +
+                '</tr></thead><tbody>';
+
+            html += d.preview.rows.map(function (row, i) {
+                return '<tr><td style="color:#94a3b8;font-size:10px;text-align:center">' + (i + 1) + '</td>' +
+                    row.map(function (cell) {
+                        return '<td>' + (cell === null || cell === undefined
+                            ? '<span style="color:#cbd5e1;font-style:italic">—</span>' : String(cell)) + '</td>';
+                    }).join('') + '</tr>';
+            }).join('');
+
+            html += '</tbody></table></div>';
+        }
+
+
+        if (prev) prev.innerHTML = html;
+        if (btn) btn.disabled = false;
+        _refreshBadges();
+
+    } catch (e) {
+        var prev = document.getElementById('d-prev');
+        if (prev) prev.innerHTML =
+            '<div style="padding:10px;color:#ef4444;font-size:12px">' +
+            'Failed to load duplicate info. Check backend connection.</div>';
+    }
 }
+
 
 async function applyDup() {
     var r = document.querySelector('input[name="dKeep"]:checked');
@@ -380,11 +609,12 @@ async function applyDup() {
     try {
         await req('POST', '/preprocessing/' + SID + '/duplicates', { keep: r ? r.value : 'first' });
         toast('Duplicates removed');
+        await Promise.all([_refresh(), loadDups()]);
         markDone(2);
-        Promise.all([_refresh(), loadDups()]);
     } catch (e) { toast(e.message, 'terr'); }
     finally { setBtnLoading('dupBtn', false); }
 }
+
 
 /* ── CONSTANT COLUMNS ────────────────────────── */
 async function loadConst() {
@@ -413,7 +643,7 @@ async function applyConst() {
         await req('POST', '/preprocessing/' + SID + '/constant-columns', { columns: sel });
         toast(sel.length + ' columns removed');
         markDone(3);
-        Promise.all([_refresh(), loadConst()]);
+        await Promise.all([_refresh(), loadConst()]);
     } catch (e) { toast(e.message, 'terr'); }
     finally { setBtnLoading('constBtn', false); }
 }
@@ -598,10 +828,13 @@ async function undoA() {
             batch.forEach(function (c) { scaledCols.delete(c); });
         }
         _updateScalingUI();
-        await loadMissing();
-        _refresh();
+
+        /* ── LIVE REFRESH: update stats + badge + currently visible section ── */
+        await _fullRefresh();
+
     } catch (e) { toast('Nothing to undo', 'terr'); }
 }
+
 async function redoA() {
     try {
         /* Record history length before redo to detect what was added */
@@ -623,10 +856,13 @@ async function redoA() {
             }
         }
         _updateScalingUI();
-        await loadMissing();
-        _refresh();
+
+        /* ── LIVE REFRESH: update stats + badge + currently visible section ── */
+        await _fullRefresh();
+
     } catch (e) { toast('Nothing to redo', 'terr'); }
 }
+
 async function resetA() {
     if (!confirm('Reset to original dataset? All changes will be lost.')) return;
     try {
@@ -638,8 +874,12 @@ async function resetA() {
         _scalingStack = [];
         _scalingRedoStack = [];
         _updateScalingUI();
+        /* Remove all done markers */
         document.querySelectorAll('.nav-btn').forEach(function (b) { b.classList.remove('done'); });
-        Promise.all([loadStats(true), loadCols()]).then(function () { loadMissing(); loadHist(); });
+        /* Reload columns and fully refresh everything live */
+        await Promise.all([loadStats(true), loadCols()]);
+        await _fullRefresh();
+        loadHist();
     } catch (e) { toast(e.message, 'terr'); }
 }
 
@@ -669,7 +909,7 @@ async function loadReport() {
         }
         var qr = [
             { c: 'Missing Values', ok: missing && missing.total_null_count === 0, d: missing ? missing.total_null_count + ' remaining (' + missing.total_null_percentage + '%)' : 'Unknown' },
-            { c: 'Duplicate Rows', ok: dups && dups.duplicate_row_count === 0, d: dups ? dups.duplicate_row_count + ' remaining' : 'Unknown' },
+            { c: 'Duplicate Rows', ok: dups && (dups.rows_to_remove || 0) === 0, d: dups ? (dups.rows_to_remove || 0) + ' rows to remove, ' + (dups.unique_rows || 0) + ' will remain' : 'Unknown' },
             { c: 'Rows', ok: true, d: orig.rows + ' to ' + s.current_rows },
             { c: 'Columns', ok: true, d: orig.cols + ' to ' + s.current_columns },
             { c: 'Steps Done', ok: hist && hist.length > 0, d: (hist ? hist.length : 0) + ' steps' }
