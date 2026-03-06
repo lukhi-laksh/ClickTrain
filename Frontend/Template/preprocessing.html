@@ -740,6 +740,95 @@
     .inp:focus {
       border-color: #6366f1
     }
+
+    /* Ordinal drag-and-drop builder */
+    .ord-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: #f8fafc;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      cursor: grab;
+      user-select: none;
+      transition: background .12s, border-color .12s, box-shadow .12s
+    }
+
+    .ord-item:active {
+      cursor: grabbing
+    }
+
+    .ord-item.drag-over {
+      border-color: #6366f1;
+      background: #eef2ff;
+      box-shadow: 0 0 0 2px #c7d2fe
+    }
+
+    .ord-item.dragging {
+      opacity: .4
+    }
+
+    .ord-rank {
+      min-width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #6366f1;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0
+    }
+
+    .ord-grip {
+      color: #cbd5e1;
+      font-size: 14px;
+      flex-shrink: 0
+    }
+
+    .ord-val {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1e293b;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap
+    }
+
+    .ord-arrow {
+      font-size: 12px;
+      color: #94a3b8
+    }
+
+    .ord-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 9px;
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      border-radius: 20px;
+      font-size: 12px
+    }
+
+    .ord-chip-val {
+      font-weight: 600;
+      color: #1e293b
+    }
+
+    .ord-chip-num {
+      font-weight: 700;
+      color: #6366f1;
+      background: #eef2ff;
+      border-radius: 10px;
+      padding: 1px 6px;
+      font-size: 11px
+    }
   </style>
 </head>
 
@@ -1011,7 +1100,6 @@
             <button class="tab on" data-et="label" onclick="eTab('label')">Label</button>
             <button class="tab" data-et="onehot" onclick="eTab('onehot')">One-Hot</button>
             <button class="tab" data-et="ordinal" onclick="eTab('ordinal')">Ordinal</button>
-            <button class="tab" data-et="target" onclick="eTab('target')">Target</button>
           </div>
           <div id="et-label" class="ep">
             <div class="card-sub" style="margin-bottom:8px">Converts each category to a number (0,1,2...). Leave all
@@ -1028,30 +1116,46 @@
             <button class="btn btn-i" id="applyOHBtn" onclick="applyOnehot()">Apply One-Hot Encoding</button>
           </div>
           <div id="et-ordinal" class="ep" style="display:none">
-            <div class="card-sub" style="margin-bottom:8px">Assign order-based numbers. Use when order matters (Low,
-              Medium, High).</div>
-            <div class="rl">Select Column</div>
-            <select id="ordC" class="inp" style="margin-bottom:8px"></select>
-            <label
-              style="display:flex;align-items:center;gap:7px;font-size:13px;margin-bottom:6px;cursor:pointer"><input
-                type="checkbox" id="ordA" checked onchange="toggleOrdM()"> Auto-detect order</label>
-            <div id="ordM" style="display:none;margin-bottom:8px">
-              <div class="rl">Order (comma-separated, lowest first)</div><input type="text" id="ordO" class="inp"
-                placeholder="e.g. Low, Medium, High">
-            </div>
-            <button class="btn btn-i" id="applyOrdBtn" onclick="applyOrdinal()">Apply Ordinal Encoding</button>
-          </div>
-          <div id="et-target" class="ep" style="display:none">
+            <!-- Explanation -->
             <div
-              style="background:#fff7ed;border:1px solid #fed7aa;border-radius:7px;padding:8px 10px;margin-bottom:8px;font-size:12px;color:#92400e">
-              Warning: Can cause data leakage. Use with proper cross-validation.</div>
-            <div class="rl">Columns to Encode</div>
-            <div id="pk-target" class="cpicker" style="margin-bottom:8px"></div>
-            <div class="rl">Target Column</div>
-            <select id="tgtC" class="inp" style="margin-bottom:8px">
-              <option value="">Select...</option>
-            </select>
-            <button class="btn btn-i" id="applyTgtBtn" onclick="applyTarget()">Apply Target Encoding</button>
+              style="background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#075985;line-height:1.6">
+              <b>📊 When to use Ordinal?</b> Your categories have a clear rank e.g. <em>Low &lt; Medium &lt; High</em>
+              or <em>Poor &lt; Good &lt; Excellent</em>.
+              Each value becomes a number (0, 1, 2…). Drag rows to set the order &mdash; top is lowest.
+            </div>
+
+            <!-- Step 1: pick column -->
+            <div class="rl">Step 1 &mdash; Pick a column</div>
+            <select id="ordC" class="inp" style="margin-bottom:8px" onchange="loadOrdinalValues()"></select>
+
+            <!-- Loading indicator -->
+            <div id="ord-loading"
+              style="display:none;padding:8px 10px;background:#fef9c3;border:1px solid #fde68a;border-radius:7px;font-size:12px;color:#78350f;margin-bottom:8px">
+              ⏳ Loading values…</div>
+            <div id="ord-error"
+              style="display:none;padding:8px 10px;background:#fff1f2;border:1px solid #fca5a5;border-radius:7px;font-size:12px;color:#be123c;margin-bottom:8px">
+            </div>
+
+            <!-- Step 2: set order -->
+            <div id="ord-step2" style="display:none">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                <div class="rl" style="margin-bottom:0">Step 2 &mdash; Drag to set order <span
+                    style="text-transform:none;font-weight:400;color:#94a3b8">(top = 0, bottom = highest)</span></div>
+                <label
+                  style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#6366f1;cursor:pointer;white-space:nowrap">
+                  <input type="checkbox" id="ordAutoSort" checked onchange="_onOrdAutoToggle()"> Auto-sort
+                </label>
+              </div>
+              <div id="ord-drag-list" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px"></div>
+
+              <!-- Live preview -->
+              <div
+                style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px">
+                Preview &mdash; final mapping</div>
+              <div id="ord-preview" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px"></div>
+
+              <button class="btn btn-i" id="applyOrdBtn" onclick="applyOrdinal()">Apply Ordinal Encoding</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1214,7 +1318,7 @@
     </main>
   </div>
 
-  <script src="preprocessing_script.js?v=3"></script>
+  <script src="preprocessing_script.js?v=6"></script>
   <script src="header.js"></script>
 </body>
 

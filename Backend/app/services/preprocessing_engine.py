@@ -49,8 +49,9 @@ class PreprocessingEngine:
     def _cur(self, sid):
         return self.dm.get_current(sid)
 
-    def _commit(self, sid, df, desc):
-        self.dm.commit(sid, df, desc)
+    def _commit(self, sid, df, desc, pre_op_registry=None):
+        """Pass pre_op_registry when the caller already modified the registry."""
+        self.dm.commit(sid, df, desc, pre_op_registry=pre_op_registry)
 
     # ── Init ─────────────────────────────────────────────────────────────
     def initialize_dataset(self, session_id: str, df: pd.DataFrame,
@@ -156,10 +157,12 @@ class PreprocessingEngine:
 
     def label_encode(self, sid: str, columns: List[str]) -> Dict:
         df = self._cur(sid)
+        pre_reg = self.dm._snap_registry(sid)   # snapshot BEFORE registry is mutated
         new_df, meta = self.em.label_encode(df, columns, sid, registry=self.cr)
         encoded = meta.get('columns_encoded', [])
         self._commit(sid, new_df,
-                     f'Label encoding on {len(encoded)} col(s)')
+                     f'Label encoding on {len(encoded)} col(s)',
+                     pre_op_registry=pre_reg)
         return {'shape': new_df.shape, 'metadata': meta}
 
     def one_hot_encode(self, sid: str, columns: List[str],
@@ -167,34 +170,40 @@ class PreprocessingEngine:
                        handle_binary: bool = True,
                        max_categories: int = 50) -> Dict:
         df = self._cur(sid)
+        pre_reg = self.dm._snap_registry(sid)   # snapshot BEFORE registry is mutated
         new_df, meta = self.em.one_hot_encode(
             df, columns, drop_first, handle_binary, sid,
             registry=self.cr, max_categories=max_categories
         )
         self._commit(sid, new_df,
-                     f'One-hot encoding on {len(columns)} col(s)')
+                     f'One-hot encoding on {len(columns)} col(s)',
+                     pre_op_registry=pre_reg)
         return {'shape': new_df.shape, 'metadata': meta}
 
     def ordinal_encode(self, sid: str, column: str,
                        categories=None, auto_order: bool = True) -> Dict:
         df = self._cur(sid)
+        pre_reg = self.dm._snap_registry(sid)   # snapshot BEFORE registry is mutated
         new_df, meta = self.em.ordinal_encode(
             df, column, categories, auto_order, sid, registry=self.cr
         )
         self._commit(sid, new_df,
-                     f'Ordinal encoding on {column}')
+                     f'Ordinal encoding on {column}',
+                     pre_op_registry=pre_reg)
         return {'shape': new_df.shape, 'metadata': meta}
 
     def target_encode(self, sid: str, columns: List[str],
                       target_column: str,
                       smoothing: float = 10.0) -> Dict:
         df = self._cur(sid)
+        pre_reg = self.dm._snap_registry(sid)   # snapshot BEFORE registry is mutated
         new_df, meta = self.em.target_encode(
             df, columns, target_column, sid,
             registry=self.cr, smoothing=smoothing
         )
         self._commit(sid, new_df,
-                     f'Target encoding on {len(columns)} col(s)')
+                     f'Target encoding on {len(columns)} col(s)',
+                     pre_op_registry=pre_reg)
         return {'shape': new_df.shape, 'metadata': meta}
 
     # ── Scaling ──────────────────────────────────────────────────────────

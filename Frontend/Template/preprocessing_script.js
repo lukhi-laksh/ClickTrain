@@ -1,10 +1,10 @@
-/*  <script src="preprocessing_script.js?v=4"></script>
-imized for maximum speed + live undo/redo/reset */
+/*  <script src="preprocessing_script.js?v=5"></script>
+imized for maximum speed + live undo/redo/reset — encoding sync fix */
 var API = 'http://127.0.0.1:8000/api';
 var SID = null;
 var numCols = [], catCols = [], allCols = [];
 var numColsWithNull = [], catColsWithNull = [];  // only cols that have nulls
-var encodedCols = new Set();
+var encodedCols = new Set();   // authoritative: always re-derived from backend
 var scaledCols = new Set();      // columns that have been scaled (front-end tracking)
 var _scalingStack = [];          // undo stack: each entry = array of cols scaled in that batch
 var _scalingRedoStack = [];      // redo stack: mirrors undo for redo-of-scaling ops
@@ -47,6 +47,7 @@ function go(name) {
     if (name === 'missing') loadMissing();
     else if (name === 'duplicates') loadDups();
     else if (name === 'constant') loadConst();
+    else if (name === 'encoding') { _syncEncodedCols(); }  // always re-sync on navigate
     else if (name === 'report') loadReport();
 }
 function markDone(n) {
@@ -73,7 +74,181 @@ function tgPick(label) {
     label.classList.add('on');
 }
 
-function toggleOrdM() { document.getElementById('ordM').style.display = document.getElementById('ordA').checked ? 'none' : ''; }
+/* ── Ordinal Encoding ────────────────────────────────────────────────── */
+var _ordValues = [];    // real unique strings from backend for selected column
+var _ordDragSrc = null;  // element being dragged
+
+/* Triggered when user picks a column from the ordinal dropdown.
+   Fetches the real unique values directly via fetch() so we get exact
+   error details if something goes wrong (not just a generic exception). */
+async function loadOrdinalValues() {
+    var col = document.getElementById('ordC').value;
+    var step2 = document.getElementById('ord-step2');
+    var loader = document.getElementById('ord-loading');
+    var errBox = document.getElementById('ord-error');
+
+    /* Reset */
+    _ordValues = [];
+    if (step2) step2.style.display = 'none';
+    if (loader) loader.style.display = 'none';
+    if (errBox) errBox.style.display = 'none';
+    if (!col) return;
+
+    if (loader) loader.style.display = '';
+    try {
+        /* Use raw fetch so we can read the response body on error          */
+        var url = API + '/preprocessing/' + SID +
+            '/column-values?column=' + encodeURIComponent(col);
+        var resp = await fetch(url);
+        var json = await resp.json();
+
+        if (!resp.ok) {
+            throw new Error(json.detail || ('HTTP ' + resp.status));
+        }
+
+        _ordValues = (json.values || []).map(String);
+        if (loader) loader.style.display = 'none';
+
+        if (!_ordValues.length) {
+            _ordShowError('This column has no values to encode.');
+            return;
+        }
+
+        /* Auto-sort is checked by default: sort the list before showing  */
+        _ordApplyAutoSort();
+
+        /* Build drag list and preview, show step 2                       */
+        _buildOrdDragList();
+        _updateOrdPreview();
+        if (step2) step2.style.display = '';
+
+    } catch (e) {
+        if (loader) loader.style.display = 'none';
+        _ordShowError('Could not load values: ' + e.message);
+    }
+}
+
+function _ordShowError(msg) {
+    var errBox = document.getElementById('ord-error');
+    if (errBox) { errBox.textContent = '⚠️ ' + msg; errBox.style.display = ''; }
+}
+
+/* Sort _ordValues in place: numeric sort if all values look numeric,
+   else alphabetical. Called when Auto-sort is enabled.              */
+function _ordApplyAutoSort() {
+    var allNum = _ordValues.every(function (v) { return !isNaN(v) && v.trim() !== ''; });
+    if (allNum) {
+        _ordValues.sort(function (a, b) { return parseFloat(a) - parseFloat(b); });
+    } else {
+        _ordValues.sort();
+    }
+}
+
+/* Checkbox onchange handler – when user ticks/unticks Auto-sort */
+function _onOrdAutoToggle() {
+    var chk = document.getElementById('ordAutoSort');
+    if (chk && chk.checked) {
+        /* Re-read current DOM order then sort it */
+        _ordValues = _getOrdOrder();   // capture current drag order first
+        _ordApplyAutoSort();            // then sort alphabetically/numerically
+        _buildOrdDragList();            // redraw with new order
+    }
+    _updateOrdPreview();
+}
+
+/* Build the draggable rows from _ordValues */
+function _buildOrdDragList() {
+    var list = document.getElementById('ord-drag-list');
+    if (!list) return;
+    list.innerHTML = '';
+    var frag = document.createDocumentFragment();
+    _ordValues.forEach(function (val, i) {
+        var item = document.createElement('div');
+        item.className = 'ord-item';
+        item.draggable = true;
+        item.setAttribute('data-val', val);
+        item.innerHTML =
+            '<span class="ord-grip">☰</span>' +
+            '<span class="ord-rank">' + i + '</span>' +
+            '<span class="ord-val" title="' + _escHtml(val) + '">' + _escHtml(val) + '</span>' +
+            '<span class="ord-arrow">↕ drag</span>';
+        _initOrdDrag(item);
+        frag.appendChild(item);
+    });
+    list.appendChild(frag);
+}
+
+/* Escape HTML special chars so values like <test> don't break the DOM */
+function _escHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/* Wire HTML5 drag events onto one row item */
+function _initOrdDrag(item) {
+    item.addEventListener('dragstart', function (e) {
+        _ordDragSrc = item;
+        item.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+    });
+    item.addEventListener('dragend', function () {
+        item.classList.remove('dragging');
+        document.querySelectorAll('.ord-item').forEach(
+            function (el) { el.classList.remove('drag-over'); });
+        _refreshOrdRanks();
+        _updateOrdPreview();
+        /* After manual drag, uncheck Auto-sort */
+        var chk = document.getElementById('ordAutoSort');
+        if (chk) chk.checked = false;
+    });
+    item.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        document.querySelectorAll('.ord-item').forEach(
+            function (el) { el.classList.remove('drag-over'); });
+        item.classList.add('drag-over');
+    });
+    item.addEventListener('drop', function (e) {
+        e.preventDefault();
+        if (_ordDragSrc && _ordDragSrc !== item) {
+            var parent = item.parentNode;
+            var items = Array.from(parent.children);
+            var si = items.indexOf(_ordDragSrc);
+            var di = items.indexOf(item);
+            if (si < di) parent.insertBefore(_ordDragSrc, item.nextSibling);
+            else parent.insertBefore(_ordDragSrc, item);
+        }
+    });
+}
+
+/* Renumber the rank badges (0,1,2…) after a drag drop */
+function _refreshOrdRanks() {
+    var list = document.getElementById('ord-drag-list');
+    if (!list) return;
+    list.querySelectorAll('.ord-item').forEach(function (item, i) {
+        var badge = item.querySelector('.ord-rank');
+        if (badge) badge.textContent = i;
+    });
+}
+
+/* Return the current category order by reading rows from the DOM */
+function _getOrdOrder() {
+    var list = document.getElementById('ord-drag-list');
+    if (!list) return _ordValues.slice();
+    return Array.from(list.querySelectorAll('.ord-item'))
+        .map(function (el) { return el.getAttribute('data-val'); });
+}
+
+/* Rebuild the preview chip strip below the drag list */
+function _updateOrdPreview() {
+    var wrap = document.getElementById('ord-preview');
+    if (!wrap) return;
+    var order = _getOrdOrder();
+    if (!order.length) { wrap.innerHTML = ''; return; }
+    wrap.innerHTML = order.map(function (val, i) {
+        return '<span class="ord-chip"><span class="ord-chip-val">' + _escHtml(val) + '</span>' +
+            '<span class="ord-chip-num">→ ' + i + '</span></span>';
+    }).join('');
+}
 
 /* ── Column Picker ───────────────────────────── */
 function buildPicker(id, cols, type, excludeSet) {
@@ -243,25 +418,48 @@ function _rebuildPickers() {
      3. Use the backend’s /encodable-columns list to mark any catCols that
         are STILL encoded (e.g. after partial undo) back into encodedCols.
    This is called exclusively from _fullRefresh() after undo/redo/reset.   */
+/* ── _syncEncodedCols ─────────────────────────────────────────────────────
+   Single source of truth for encoding pickers. ALWAYS hits the backend.
+   Steps:
+     1. loadCols()           → refresh numCols/catCols from live df dtypes
+     2. /encodable-columns   → backend registry tells us which catCols are
+                               still unencoded (role='original_categorical')
+     3. Derive encodedCols   → catCols NOT in the encodable set
+     4. Rebuild all 4 pickers atomically
+   Called after: navigate to encoding, every apply, every undo/redo/reset. */
 async function _syncEncodedCols() {
     try {
-        /* First: reload column lists so catCols reflects the current df dtypes */
+        /* Show a subtle loading state in pickers so user sees action */
+        ['pk-label', 'pk-onehot', 'pk-target'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) el.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:#94a3b8;font-style:italic">Syncing columns...</div>';
+        });
+
+        /* 1. Reload column lists from live DataFrame */
         await loadCols();
-        /* Second: ask backend which catCols are still original_categorical         */
+
+        /* 2. Ask backend which catCols are still encodable (original_categorical) */
         var d = await req('GET', '/preprocessing/' + SID + '/encodable-columns');
         var encodable = new Set(d.encodable_columns || []);
-        /* Any catCol NOT in encodable is still encoded (rare after undo, but safe) */
+
+        /* 3. Derive encodedCols: catCols NOT in the encodable set */
         encodedCols.clear();
         catCols.forEach(function (c) {
             if (!encodable.has(c)) encodedCols.add(c);
         });
-        /* Rebuild every picker/dropdown that depends on encodedCols */
-        buildPicker('label', catCols, 'cat', encodedCols);
-        buildPicker('onehot', catCols, 'cat', encodedCols);
-        buildPicker('target', catCols, 'cat', encodedCols);
-        var unenc = catCols.filter(function (c) { return !encodedCols.has(c); });
-        popSel('ordC', unenc, 'Select column...');
+
+        /* 4. Rebuild all encoding pickers atomically */
+        _rebuildEncodingPickers();
     } catch (e) { /* silent — non-critical */ }
+}
+
+/* Rebuild all 4 encoding pickers/selects from current catCols + encodedCols */
+function _rebuildEncodingPickers() {
+    buildPicker('label', catCols, 'cat', encodedCols);
+    buildPicker('onehot', catCols, 'cat', encodedCols);
+    buildPicker('target', catCols, 'cat', encodedCols);
+    var unenc = catCols.filter(function (c) { return !encodedCols.has(c); });
+    popSel('ordC', unenc, 'Select column...');
 }
 
 /* Build the missing-value picker — shows only null columns or a clean message */
@@ -371,12 +569,12 @@ async function _refreshActiveSection() {
     } else if (_activeSection === 'report') {
         await loadReport();
     }
-    /* For scaling/outliers/sampling, rebuild pickers to reflect new data.
-       Encoding pickers are always rebuilt by _syncEncodedCols() above,
-       so we skip loadCols() for encoding to avoid a redundant double-call. */
+    /* For scaling/outliers/sampling, rebuild pickers to reflect new data. */
     if (_activeSection === 'scaling' || _activeSection === 'outliers' || _activeSection === 'sampling') {
         await loadCols();
     }
+    /* For encoding: pickers are already rebuilt by _syncEncodedCols() which
+       _fullRefresh() runs concurrently. No extra call needed here. */
 }
 
 /* ── After-action refresh: stats + history + badge + active section ── */
@@ -398,11 +596,8 @@ async function _refresh() {
    Clears encodedCols first so stale frontend state can’t bleed through,
    then re-syncs everything from the backend in the right order.           */
 async function _fullRefresh() {
-    await _refresh();
-    /* Clear stale encoding state before re-syncing */
     encodedCols.clear();
-    /* Re-sync: reloads catCols from live df, then derives encodedCols */
-    await _syncEncodedCols();
+    await Promise.all([_refresh(), _syncEncodedCols()]);
     await _refreshActiveSection();
 }
 
@@ -648,47 +843,47 @@ async function applyConst() {
     finally { setBtnLoading('constBtn', false); }
 }
 
-/* ── ENCODING ────────────────────────────────── */
+/* ── ENCODING ────────────────────────────────────────────────────────────
+   ALL apply functions now call _syncEncodedCols() after success instead of
+   the old _markEncoded(). This ensures pickers are ALWAYS in sync with the
+   backend registry, making undo/redo work perfectly without stale state.  */
+
 function eTab(name) {
     document.querySelectorAll('.ep').forEach(function (p) { p.style.display = 'none'; });
     document.getElementById('et-' + name).style.display = '';
     document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('on'); if (t.getAttribute('data-et') === name) t.classList.add('on'); });
 }
 
-function _markEncoded(cols) {
-    cols.forEach(function (c) { encodedCols.add(c); });
-    buildPicker('label', catCols, 'cat', encodedCols);
-    buildPicker('onehot', catCols, 'cat', encodedCols);
-    buildPicker('target', catCols, 'cat', encodedCols);
-    var unenc = catCols.filter(function (c) { return !encodedCols.has(c); });
-    popSel('ordC', unenc, 'Select column...');
-}
-
 async function applyLabel() {
+    /* Get picked columns; fall back to all unencoded if nothing selected */
     var avail = catCols.filter(function (c) { return !encodedCols.has(c); });
-    var cols = getPicked('label'); if (!cols.length) cols = avail;
+    var cols = getPicked('label');
+    if (!cols.length) cols = avail;
     if (!cols.length) { toast('No unencoded categorical columns left', 'terr'); return; }
     setBtnLoading('applyLabelBtn', true);
     try {
         await req('POST', '/preprocessing/' + SID + '/encoding/label', { columns: cols });
-        toast('Label encoding applied on ' + cols.length + ' cols');
-        _markEncoded(cols); markDone(4); _refresh();
+        toast('Label encoding applied on ' + cols.length + ' col' + (cols.length !== 1 ? 's' : ''));
+        markDone(4);
+        /* Sync pickers + stats in parallel — fast */
+        await Promise.all([_refresh(), _syncEncodedCols()]);
     } catch (e) { toast(e.message, 'terr'); }
     finally { setBtnLoading('applyLabelBtn', false); }
 }
 
 async function applyOnehot() {
     var avail = catCols.filter(function (c) { return !encodedCols.has(c); });
-    var cols = getPicked('onehot'); if (!cols.length) cols = avail;
+    var cols = getPicked('onehot');
+    if (!cols.length) cols = avail;
     if (!cols.length) { toast('No unencoded categorical columns left', 'terr'); return; }
     var drop = document.getElementById('ohDrop').checked;
     setBtnLoading('applyOHBtn', true);
     try {
         await req('POST', '/preprocessing/' + SID + '/encoding/onehot', { columns: cols, drop_first: drop, handle_binary: true });
-        toast('One-hot encoding applied');
-        _markEncoded(cols); markDone(4);
-        // After one-hot, column count changes — refresh cols and stats in parallel
-        Promise.all([_refresh(), loadCols()]);
+        toast('One-hot encoding applied on ' + cols.length + ' col' + (cols.length !== 1 ? 's' : ''));
+        markDone(4);
+        /* One-hot changes column count too → sync everything */
+        await Promise.all([_refresh(), _syncEncodedCols()]);
     } catch (e) { toast(e.message, 'terr'); }
     finally { setBtnLoading('applyOHBtn', false); }
 }
@@ -696,27 +891,48 @@ async function applyOnehot() {
 async function applyOrdinal() {
     var col = document.getElementById('ordC').value;
     if (!col) { toast('Select a column', 'terr'); return; }
-    var auto = document.getElementById('ordA').checked, cats = null;
-    if (!auto) { var raw = (document.getElementById('ordO').value || '').trim(); if (!raw) { toast('Enter category order', 'terr'); return; } cats = raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean); }
+    if (!_ordValues.length) { toast('Load column values first', 'terr'); return; }
+
+    /* Get the final ordered list — auto sorts it, manual uses drag order */
+    var cats = _getOrdOrder();
+    if (!cats || !cats.length) { toast('No category order found', 'terr'); return; }
+
     setBtnLoading('applyOrdBtn', true);
     try {
-        await req('POST', '/preprocessing/' + SID + '/encoding/ordinal', { column: col, auto_order: auto, categories: cats });
-        toast('Ordinal encoding applied on ' + col);
-        _markEncoded([col]); markDone(4); _refresh();
+        /* Always send explicit categories so backend never has to guess
+           and unknown-category -1 mapping can never occur. */
+        await req('POST', '/preprocessing/' + SID + '/encoding/ordinal', {
+            column: col,
+            auto_order: false,
+            categories: cats
+        });
+        toast('Ordinal encoding applied on “' + col + '” (' + cats.length + ' categories)');
+        markDone(4);
+
+        /* Reset the ordinal panel so user can pick another column */
+        _ordValues = [];
+        var modeRow = document.getElementById('ord-mode-row');
+        var applyBtn = document.getElementById('applyOrdBtn');
+        if (modeRow) modeRow.style.display = 'none';
+        if (applyBtn) applyBtn.style.display = 'none';
+
+        await Promise.all([_refresh(), _syncEncodedCols()]);
     } catch (e) { toast(e.message, 'terr'); }
     finally { setBtnLoading('applyOrdBtn', false); }
 }
 
 async function applyTarget() {
     var avail = catCols.filter(function (c) { return !encodedCols.has(c); });
-    var cols = getPicked('target'); if (!cols.length) cols = avail;
+    var cols = getPicked('target');
+    if (!cols.length) cols = avail;
     var tgt = document.getElementById('tgtC').value;
     if (!cols.length || !tgt) { toast('Select columns and a target column', 'terr'); return; }
     setBtnLoading('applyTgtBtn', true);
     try {
         await req('POST', '/preprocessing/' + SID + '/encoding/target', { columns: cols, target_column: tgt });
-        toast('Target encoding applied');
-        _markEncoded(cols); markDone(4); _refresh();
+        toast('Target encoding applied on ' + cols.length + ' col' + (cols.length !== 1 ? 's' : ''));
+        markDone(4);
+        await Promise.all([_refresh(), _syncEncodedCols()]);
     } catch (e) { toast(e.message, 'terr'); }
     finally { setBtnLoading('applyTgtBtn', false); }
 }

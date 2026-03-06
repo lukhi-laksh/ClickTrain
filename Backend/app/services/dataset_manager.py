@@ -91,18 +91,32 @@ class DatasetManager:
         self._cr._registry[session_id] = snapshot
 
     # ── Commit a new version (push old to undo stack) ───
-    def commit(self, session_id: str, new_df: pd.DataFrame, description: str):
+    def commit(self, session_id: str, new_df: pd.DataFrame, description: str,
+               pre_op_registry=None):
+        """
+        Commit a new dataframe version.
+
+        pre_op_registry: registry snapshot taken BEFORE the operation ran.
+          Pass this when your operation modifies the ColumnRegistry before
+          calling commit (e.g. all encoding operations).  When None, the
+          snapshot is taken inside commit — which is AFTER the operation
+          already changed the registry, making undo restore the wrong roles.
+        """
         if session_id not in self._current:
             raise ValueError(f'Session {session_id} not found.')
 
-        # Snapshot current registry state BEFORE we modify anything
-        reg_snap = self._snap_registry(session_id)
+        # Use the caller-supplied pre-operation snapshot when available;
+        # fall back to snapshotting now (for operations that don't touch
+        # the registry, e.g. drop-duplicates, fill-nulls, scale, etc.).
+        reg_snap = pre_op_registry if pre_op_registry is not None \
+            else self._snap_registry(session_id)
+
         log_entry = {
             'description': description,
             'timestamp':   datetime.now().isoformat(),
         }
 
-        # Push (old_df, old_registry, new_log_entry) onto undo stack
+        # Push (old_df, pre-op_registry, new_log_entry) onto undo stack
         self._undo[session_id].append(
             (self._current[session_id], reg_snap, log_entry)
         )

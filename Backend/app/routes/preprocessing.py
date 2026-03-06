@@ -304,6 +304,33 @@ async def get_encodable_columns(session_id: str):
         raise HTTPException(500, detail=f"Failed to get encodable columns: {e}")
 
 
+@router.get("/preprocessing/{session_id}/column-values")
+async def get_column_unique_values(session_id: str, column: str):
+    """
+    Return the sorted unique non-null values for a specific column.
+    Used by the Ordinal Encoding UI to populate the drag-and-drop order builder
+    so users never have to manually type category names.
+    """
+    try:
+        df = preprocessing_engine.get_current_dataset(session_id)
+        if column not in df.columns:
+            raise HTTPException(404, detail=f"Column '{column}' not found.")
+        raw = df[column].dropna().unique().tolist()
+        # Return as strings, sorted where possible
+        str_vals = [str(v) for v in raw]
+        try:
+            str_vals = sorted(str_vals)
+        except Exception:
+            pass
+        return {'column': column, 'values': str_vals, 'count': len(str_vals)}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(500, detail=f"Failed to get column values: {e}")
+
+
 # ==================== Outliers ====================
 
 @router.post("/preprocessing/{session_id}/outliers/detect")
